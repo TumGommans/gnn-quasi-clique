@@ -2,6 +2,7 @@ FROM python:3.9-slim
 
 # avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # Install OS deps for matplotlib & torch
 RUN apt-get update && \
