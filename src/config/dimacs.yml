@@ -1,0 +1,43 @@
+# Config for running the algorithms on DIMACS instances
+
+methods:
+  - "tsqc"
+  - "prr_tsqc"
+  - "deeptsqc"
+filepath: "data/dimacs/"
+search_depth_L: 1000   
+max_iterations_It: 1000000
+time_limit: 600
+master_seed: 42
+gamma:
+  - 0.85
+  - 0.95
+k:
+  0.85:
+    brock200-2: 19
+    brock200-4: 39
+    brock400-2: 100
+    brock400-4: 102
+    hamming8-4: 35
+    keller4: 31
+    keller5: 286
+    p-hat300-3: 180
+    p-hat700-1: 19
+    p-hat700-2: 223
+    p-hat700-3: 430
+    p-hat1500-2: 487
+    p-hat1500-3: 943
+  0.95:
+    brock200-2: 13
+    brock200-4: 21
+    brock400-2: 40
+    brock400-4: 39
+    hamming8-4: 17
+    keller4: 15
+    keller5: 47
+    p-hat300-3: 71
+    p-hat700-1: 13
+    p-hat700-2: 96
+    p-hat700-3: 176
+    p-hat1500-2: 193
+    p-hat1500-3: 351

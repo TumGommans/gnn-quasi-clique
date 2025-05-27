@@ -1,0 +1,12 @@
+{
+    "activation": "ELU",
+    "batch_size": 32,
+    "dropout": 0.29573913794512363,
+    "epochs": 100,
+    "final_mlp_layers": 2,
+    "hidden_dim": 128,
+    "lr": 0.00044773074205619966,
+    "mlp_layers_per_gin": 3,
+    "num_gin_layers": 2,
+    "readout": "max"
+}

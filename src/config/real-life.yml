@@ -1,0 +1,73 @@
+# Config for running the algorithms on real life instances
+
+methods:
+  - "tsqc"
+  - "prr_tsqc"
+  - "deeptsqc"
+filepath: "data/real-life/"
+search_depth_L: 1000   
+max_iterations_It: 1000000
+time_limit: 600
+master_seed: 42
+gamma:
+  - 0.5
+  - 0.6
+  - 0.7
+  - 0.8
+  - 0.9
+k:
+  0.5:
+    as-735: 36
+    ca-GrQc: 81
+    California: 26
+    celegans_metabolic: 30
+    email: 25
+    geom: 44
+    Harvard500: 37
+    netscience: 31
+    SmallW: 28
+    USAir97: 67
+  0.6:
+    as-735: 29
+    ca-GrQc: 63
+    California: 14
+    celegans_metabolic: 24
+    email: 20
+    geom: 36
+    Harvard500: 29
+    netscience: 27
+    SmallW: 22
+    USAir97: 57
+  0.7:
+    as-735: 24
+    ca-GrQc: 57
+    California: 14 
+    celegans_metabolic: 18
+    email: 17
+    geom: 30
+    Harvard500: 26
+    netscience: 24
+    SmallW: 17
+    USAir97: 49
+  0.8:
+    as-735: 19
+    ca-GrQc: 52
+    California: 13
+    celegans_metabolic: 15
+    email: 15
+    geom: 26
+    Harvard500: 24
+    netscience: 22
+    SmallW: 14
+    USAir97: 43
+  0.9:
+    as-735: 15
+    ca-GrQc: 49
+    California: 12
+    celegans_metabolic: 12
+    email: 13
+    geom: 23
+    Harvard500: 23
+    netscience: 21
+    SmallW: 11
+    USAir97: 35

@@ -1,0 +1,60 @@
+\begin{table}[ht]
+    \caption{Numerical results for all DIMACS instances.}
+    \label{tab:results}
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c c c c c c c c c c c}
+    \toprule
+    \toprule
+    \multicolumn{4}{c}{instance} & & \multicolumn{3}{c}{$\omega_{\gamma}$: max(avg)} & &
+    \multicolumn{3}{c}{$t$: avg} \\
+    \cmidrule{1-4} \cmidrule{6-8} \cmidrule{10-12}
+    name & $|V|$ & $\rho$ & $\gamma$ & & \texttt{TSQC} & \texttt{PRR-TSQC} & \texttt{DeepTSQC} & & \texttt{TSQC} & \texttt{PRR-TSQC} & \texttt{DeepTSQC} \\
+    \midrule
+brock200-2 & 200 & 0.496 & 0.85 & & \textbf{19} & \textbf{19} & -- & & \textbf{0.4} & \textbf{0.4} & -- \\
+& & & 0.95 & & \textbf{13} & \textbf{13} & -- & & \textbf{11.7} & \textbf{11.7} & -- \\
+
+brock200-4 & 200 & 0.658 & 0.85 & & \textbf{39} & \textbf{39} & -- & & \textbf{0.3} & \textbf{0.3} & -- \\
+& & & 0.95 & & \textbf{21} & \textbf{21} & -- & & \textbf{0.5} & \textbf{0.5} & -- \\
+
+brock400-2 & 400 & 0.749 & 0.85 & & \textbf{100} & \textbf{100} & -- & & \textbf{9.0} & \textbf{9.0} & -- \\
+& & & 0.95 & & \textbf{40} & \textbf{40} & -- & & \textbf{23.1} & \textbf{23.1} & -- \\
+
+brock400-4 & 400 & 0.749 & 0.85 & & \textbf{102(81.6)} & \textbf{102(81.6)} & -- & & \textbf{392.4} & \textbf{392.4} & -- \\
+& & & 0.95 & & \textbf{39} & \textbf{39} & -- & & \textbf{3.8} & \textbf{3.8} & -- \\
+
+hamming8-4 & 256 & 0.639 & 0.85 & & \textbf{35} & \textbf{35} & -- & & \textbf{0.0} & \textbf{0.0} & -- \\
+& & & 0.95 & & \textbf{17} & \textbf{17} & -- & & \textbf{0.0} & \textbf{0.0} & -- \\
+
+keller4 & 171 & 0.649 & 0.85 & & \textbf{31} & \textbf{31} & -- & & \textbf{0.6} & \textbf{0.6} & -- \\
+& & & 0.95 & & \textbf{15} & \textbf{15} & -- & & \textbf{1.1} & \textbf{1.1} & -- \\
+
+keller5 & 776 & 0.752 & 0.85 & & 286 & \textbf{291} & -- & & 113.7 & 526.8 & -- \\
+& & & 0.95 & & 47 & \textbf{48(47.2)} & -- & & 5.9 & 46.2 & -- \\
+
+p-hat1500-2 & 1500 & 0.506 & 0.85 & & \textbf{487} & \textbf{487} & -- & & \textbf{31.0} & 31.3 & -- \\
+& & & 0.95 & & \textbf{193} & \textbf{193} & -- & & 6.6 & \textbf{6.2} & -- \\
+
+p-hat1500-3 & 1500 & 0.754 & 0.85 & & \textbf{943} & \textbf{943} & -- & & 86.9 & \textbf{85.4} & -- \\
+& & & 0.95 & & \textbf{351} & \textbf{351} & -- & & 18.3 & \textbf{18.2} & -- \\
+
+p-hat300-3 & 300 & 0.744 & 0.85 & & \textbf{180} & \textbf{180} & -- & & \textbf{0.6} & \textbf{0.6} & -- \\
+& & & 0.95 & & \textbf{71} & \textbf{71} & -- & & \textbf{0.2} & \textbf{0.2} & -- \\
+
+p-hat700-1 & 700 & 0.249 & 0.85 & & \textbf{19} & \textbf{19} & -- & & \textbf{5.5} & \textbf{5.5} & -- \\
+& & & 0.95 & & \textbf{13} & \textbf{13} & -- & & \textbf{29.8} & 29.9 & -- \\
+
+p-hat700-2 & 700 & 0.498 & 0.85 & & \textbf{223} & \textbf{223} & -- & & \textbf{2.9} & \textbf{2.9} & -- \\
+& & & 0.95 & & \textbf{96} & \textbf{96} & -- & & \textbf{0.6} & \textbf{0.6} & -- \\
+
+p-hat700-3 & 700 & 0.748 & 0.85 & & \textbf{430} & \textbf{430} & -- & & 7.8 & \textbf{7.7} & -- \\
+& & & 0.95 & & \textbf{176} & \textbf{176} & -- & & 2.2 & \textbf{2.1} & -- \\
+
+
+    \bottomrule
+    \bottomrule
+    \addlinespace[1pt]
+    \multicolumn{12}{l}{The maximum quasi-clique size found is denoted by $\omega_{\gamma}$, and $t$ denotes the runtime in seconds.} \\
+    \end{tabular}
+    }
+    \end{table}

@@ -1,8 +1,0 @@
-# Config for running the TSQC algorithm
-
-graph_filepath: "data/dimacs/brock400-4.txt"
-gamma: 0.85             
-initial_k: 101           
-search_depth_L: 1000   
-max_iterations_It: 100000000
-random_seed: null

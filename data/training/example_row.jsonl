@@ -1,0 +1,25 @@
+{
+    "graph_structure": {
+        "num_vertices": 4, 
+        "edge_index": [[0, 0, 1, 1, 2], [1, 2, 2, 3, 3]]
+    }, 
+    "state": {
+        "node_features": [
+            [3, 0.66, 2, 1], 
+            [2, 0.5, 4, 0], 
+            [3, 0.66, 1, 1], 
+            [2, 0.5, 3, 0]
+        ], 
+        "graph_features": {
+            "gamma": 0.8, 
+            "initial_target_k": 5,
+            "current_target_k": 6, 
+            "graph_density": 0.583,
+            "restart_count": 1
+        }
+    },
+    "action": {
+        "optimal_L_index": 0, 
+        "optimal_L_value": 500
+    }
+}

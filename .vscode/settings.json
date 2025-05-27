@@ -1,0 +1,7 @@
+{
+  "files.associations": {
+    "*.jsonl": "jsonl"
+  },
+  "editor.wordWrap": "off",
+  "editor.maxTokenizationLineLength": 100000000000,
+}

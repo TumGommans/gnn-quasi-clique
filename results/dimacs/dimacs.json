@@ -1,0 +1,36 @@
+{
+  "brock200-4": {
+    "num_vertices": 200,
+    "num_edges": 13089,
+    "density": 0.6577386934673367,
+    "0.85": {
+      "tsqc": {
+        "objectives": [
+          39
+        ],
+        "runtimes": [
+          0.030085086822509766
+        ],
+        "tie_breaking_proportion": 0.7741935483870968
+      },
+      "prr_tsqc": {
+        "objectives": [
+          39
+        ],
+        "runtimes": [
+          0.03025197982788086
+        ],
+        "tie_breaking_proportion": 0
+      },
+      "deeptsqc": {
+        "objectives": [
+          39
+        ],
+        "runtimes": [
+          0.26819300651550293
+        ],
+        "tie_breaking_proportion": 0
+      }
+    }
+  }
+}

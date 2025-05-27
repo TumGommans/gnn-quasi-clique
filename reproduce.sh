@@ -1,0 +1,1 @@
+python -m src.scripts.get_json_results

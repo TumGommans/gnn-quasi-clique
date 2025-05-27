@@ -1,4 +1,10 @@
 numpy
 matplotlib
 torch
+torch_geometric
+hyperopt
 PyYAML
+networkx
+scipy
+pandas
+gurobipy
