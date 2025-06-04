@@ -2,8 +2,6 @@
 
 methods:
   - "tsqc"
-  - "cn-tsqc"
-  - "cum-sat-tsqc"
   - "deeptsqc"
 filepath: "data/dimacs/"
 search_depth_L: 1000   

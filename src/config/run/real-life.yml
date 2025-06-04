@@ -2,8 +2,6 @@
 
 methods:
   - "tsqc"
-  - "cn-tsqc"
-  - "cum-sat-tsqc"
   - "deeptsqc"
 filepath: "data/real-life/"
 search_depth_L: 1000

@@ -11,11 +11,10 @@ from collections import defaultdict
 from src.utils.graph import Graph 
 
 from src.algorithms.tsq import TSQ
-from src.algorithms.initial_solution import InitialSolutionGenerator
 
 class TSQC:
     """
-    Implements the core TSQC algorithm structure.
+    Implements the TSQC algorithm structure.
 
     Coordinates the search for k-gamma-quasi-cliques for increasing k
     by utilizing the TSQ procedure (inner loop) and handling restarts.
@@ -28,17 +27,19 @@ class TSQC:
         search_depth_L=1000, 
         rng=None,
         best_known=False, 
-        time_limit=600,
-        cooccurrence_config_path=None
+        time_limit=600
     ):
         """
         Initializes the TSQC process.
 
         Args:
-            graph (Graph):           The graph object.
-            gamma (float):           The quasi-clique density threshold.
-            max_iterations_It (int): Overall maximum iterations for the entire process.
-            search_depth_L (int):    Search depth L for TSQ restarts.
+            graph:             The graph object
+            gamma:             The quasi-clique density threshold
+            max_iterations_It: Overall maximum iterations for the entire process
+            search_depth_L:    Search depth L for TSQ restarts
+            rng:               random number generator
+            best_known:        whether the target k given to the solve method is the best known
+            time_limit:        speaks for itself
         """
         if not isinstance(graph, Graph):
             raise TypeError("graph must be an instance of the Graph class.")
@@ -53,7 +54,6 @@ class TSQC:
         self._best_known = best_known
         self._rng = rng
         self._time_limit = time_limit
-        self._cooccurrence_config_path = cooccurrence_config_path
 
         # Long term frequency memory
         self._g_freq = defaultdict(int)
@@ -64,16 +64,19 @@ class TSQC:
         self.intensification_count = 0
         self.tie_breaker_count = 0
 
-    def solve(self, initial_k=1, use_cum_saturation=False, use_common_neighbors=False, use_cooccurrence_matrix=False):
-        """
-        Approximates the maximum gamma-quasi-clique by finding k-gamma-quasi-cliques
+    def solve(
+        self, 
+        initial_k=1, 
+        use_cum_saturation=False, 
+        use_common_neighbors=False
+    ):
+        """Approximates the maximum gamma-quasi-clique by finding k-gamma-quasi-cliques
         for increasing values of k.
 
         Args:
-            initial_k (int): The starting size k to search for.
-
-        Returns:
-            set: The best gamma-quasi-clique found.
+            initial_k: The starting size k to search for.
+            use_cum_saturation: boolean whether to use cumulative saturation from chen et al. (2021)
+            use_common_neighbors: boolean whether to use common neighbor scores as tie breakers.
         """
         self._initial_k = initial_k
         k = max(1, initial_k)
@@ -94,7 +97,6 @@ class TSQC:
             start_time_k = time.time()
 
             if is_first_attempt_for_k:
-                #  current_S = InitialSolutionGenerator(self._gamma, self._initial_k).run(self._graph)
                  current_S = self._generate_initial_solution(k)
                  self.initial_S = copy.deepcopy(current_S)
                  is_first_attempt_for_k = False
@@ -125,8 +127,6 @@ class TSQC:
                     rng=self._rng,
                     use_cum_saturation=use_cum_saturation,
                     use_common_neighbors=use_common_neighbors,
-                    use_cooccurrence_matrix=use_cooccurrence_matrix,
-                    cooccurrence_config_path=self._cooccurrence_config_path
                 )
                 S_star, it_consumed_tsq = tsq.run()
                 iteration_count_It += it_consumed_tsq
@@ -180,7 +180,11 @@ class TSQC:
 # ------------------------------------------------------------------------------------------------------------
 
     def _generate_initial_solution(self, k):
-        """Generates initial solution S."""
+        """Generates initial solution S.
+        
+        args:
+            k: the target quasi clique size
+        """
         if k > self._num_all_vertices or k <= 0: return None
         available_vertices = list(self._graph.vertices)
         if not available_vertices: return None
@@ -211,11 +215,19 @@ class TSQC:
         return S if len(S) == k else None
 
     def _generate_restart_solution(self, k):
-        """Generates restart solution. Designed for potential override."""
+        """Generates restart solution. Designed for potential override.
+        
+        args:
+            k: the target quasi clique size
+        """
         return self._default_restart_strategy(k)
 
     def _default_restart_strategy(self, k):
-        """Paper's default restart strategy using g_freq."""
+        """Default restart strategy using g_freq from Djeddi et al. (2019).
+        
+        args:
+            k: the target quasi clique size
+        """
         if k > self._num_all_vertices or k <= 0: return None
         available_vertices = list(self._graph.vertices)
         if not available_vertices: return None
@@ -238,7 +250,12 @@ class TSQC:
         return S if len(S) == k else None
 
     def _update_frequency_memory(self, u_out, v_in, k):
-        """Updates the long-term frequency memory g_freq and handles reset."""
+        """Updates the long-term frequency memory g_freq and handles reset.
+        
+        u_out: the vertex removed in the swap
+        v_in: the vertex added in the swap
+        k: the target quasi clique size
+        """
         self._g_freq[u_out] = self._g_freq.get(u_out, 0) + 1
         self._g_freq[v_in] = self._g_freq.get(v_in, 0) + 1
 
@@ -250,7 +267,13 @@ class TSQC:
 # ------------------------------------------------------------------------------------------------------------
 
     def _is_legal_quasi_clique(self, subset, k, gamma):
-        """Checks legality of given solution based on edge count."""
+        """Checks legality of given solution based on edge count.
+        
+        args:
+            subset: the current solution to check
+            k: the target quasi clique size
+            gamma: the density threshold
+        """
         if not subset or len(subset) != k:
             return False
         num_edges = self._graph.get_induced_subgraph_edges(subset)

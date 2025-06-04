@@ -9,27 +9,21 @@ from torch.utils.data import Dataset
 from torch_geometric.data import Data
 
 class RestartDataset(Dataset):
+    """Object to make tailored dataset for restarts. Initially built
+    for each restart of TSQ, but now used it for each run of TSQC given (k, gamma)"""
     def __init__(self, path):
-        # 1) count total lines
-        with open(path, 'rb') as f:
-            total_lines = sum(1 for _ in f)
-        half_lines = total_lines # * 0.1 # // 2
-
+        """initializes an object, given the data path."""
         self.path = path
         self.offsets = []
         counter = Counter()
         with open(path, 'rb') as f:
             offset = f.tell()
             for idx, raw in enumerate(f):
-                if idx >= half_lines:
-                    break
-
                 self.offsets.append(offset)
                 obj = json.loads(raw)
                 counter[int(obj['action']['optimal_L_index'])] += 1
                 offset = f.tell()
 
-        # compute class weights on just that half
         total = sum(counter.values())
         self.class_weights = torch.tensor([
             total / (len(counter) * counter[i])
@@ -49,6 +43,15 @@ class RestartDataset(Dataset):
         return Data(x=x, edge_index=ei, y=y)
 
 def train_epoch(model, loader, opt, device, class_weights):
+    """Function to train an epoch.
+    
+    args:
+        model: the GNN architecture from SearchDepthGNN
+        loader: the train data loader object containing the batches, over which gradients are computed
+        opt: the optimizer, I used Adam
+        device: the device to run computations on (CPU/CUDA)
+        class_weights: the class weights, used to mitigate the slight imbalance
+    """
     model.train()
     total_loss = 0.0
     for batch in loader:
@@ -62,6 +65,13 @@ def train_epoch(model, loader, opt, device, class_weights):
     return total_loss / len(loader.dataset)
 
 def eval_epoch(model, loader, device):
+    """Function to evaluate an epoch.
+
+    args:
+        model: the GNN architecture from SearchDepthGNN
+        loader: the data loader object containing the batches, over which predictions are computed
+        device: the device to run computations on (CPU/CUDA)
+    """
     model.eval()
     correct = 0
     with torch.no_grad():

@@ -137,51 +137,6 @@ def get_results(path):
                         best_clique_nodes, time = tsqc.solve(
                             initial_k=k_values[gamma_val][instance_name],
                         )
-                    elif method == "cn-tsqc":
-                        tsqc = TSQC(
-                            graph=custom_graph_obj,
-                            gamma=gamma_val,
-                            max_iterations_It=max_iterations_val,
-                            search_depth_L=search_depth_val,
-                            rng=random.Random(seeds[i]),
-                            best_known=True,
-                            time_limit=time_limit
-                        )
-                        print("Starting TSQC process...")
-                        best_clique_nodes, time = tsqc.solve(
-                            initial_k=k_values[gamma_val][instance_name],
-                            use_common_neighbors=True
-                        )
-                    elif method == "am-tsqc":
-                        tsqc = TSQC(
-                            graph=custom_graph_obj,
-                            gamma=gamma_val,
-                            max_iterations_It=max_iterations_val,
-                            search_depth_L=search_depth_val,
-                            rng=random.Random(seeds[i]),
-                            best_known=True,
-                            time_limit=time_limit
-                        )
-                        print("Starting TSQC process...")
-                        best_clique_nodes, time = tsqc.solve(
-                            initial_k=k_values[gamma_val][instance_name],
-                            use_cooccurrence_matrix=True
-                        )
-                    elif method == "cum-sat-tsqc":
-                        tsqc = TSQC(
-                            graph=custom_graph_obj,
-                            gamma=gamma_val,
-                            max_iterations_It=max_iterations_val,
-                            search_depth_L=search_depth_val,
-                            rng=random.Random(seeds[i]),
-                            best_known=True,
-                            time_limit=time_limit
-                        )
-                        print("Starting TSQC process...")
-                        best_clique_nodes, time = tsqc.solve(
-                            initial_k=k_values[gamma_val][instance_name],
-                            use_cum_saturation=True
-                        )
                     else:
                         tsqc = DeepTSQC(
                             graph=custom_graph_obj,

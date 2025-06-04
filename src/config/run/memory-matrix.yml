@@ -1,7 +1,0 @@
-
-# Simple Configuration for Co-occurrence Matrix Tie Breaking
-
-cooccurrence_matrix:
-  memory_decay: 0.85        # How fast to forget old information (0.9-0.99)
-  burn_in_iterations: 100   # Don't use matrix until this many iterations
-  quality_percentile: 0.9   # Only learn from top 20% of solutions

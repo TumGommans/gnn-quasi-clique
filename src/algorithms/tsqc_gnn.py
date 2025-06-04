@@ -1,6 +1,5 @@
-"""
+"""Script that implements the DeepTSQC algorithm."""
 
-"""
 import time
 import torch
 
@@ -15,24 +14,39 @@ from src.algorithms.tsqc import TSQC
 INDEX_TO_L = {0: 500, 1: 1000, 2: 5000}
 
 class DeepTSQC(TSQC):
-    """
-
-    """
+    """Object to run the DeepTSQC algorithm."""
     def __init__(
         self,
         graph: Graph,
         gamma: float,
         gnn: SearchDepthGNN,
         max_iterations_It: int = 10**8,
-        search_depth_L: int = 1000,
         rng=None,
         best_known: bool = False,
         time_limit: int = 3600,
     ):
-        super().__init__(graph, gamma, max_iterations_It, search_depth_L, rng, best_known, time_limit)
+        """Initializes an instance.
+        
+        args:
+            graph: the graph instance
+            gamma: the density threshold
+            gnn: the trained search depth predictor
+            max_iterations_It: the max iterations allowed throughout the search
+            rng: random number generator
+            best_known: whether the target k given to the solve method is the best known
+            time_limit: speaks for itself
+        """
+        super().__init__(graph, gamma, max_iterations_It, rng, best_known, time_limit)
         self._gnn = gnn
 
     def solve(self, initial_k: int = 1):
+        """Solves the MQCP using DeepTSQC.
+
+        The key difference with TSQC.solve() is the prediction of L on line 73.
+        
+        args:
+            initial_k: the target clique size to begin with
+        """
         k = max(1, initial_k)
         current_best_clique = set()
         start_time_overall = time.time()
@@ -128,6 +142,12 @@ class DeepTSQC(TSQC):
         return self.best_quasi_clique_found, best_runtime_found
 
     def _predict_L(self, current_S, k):
+        """Predict the optimal search depth for the algorithm.
+        
+        args:
+            current_S: the current initial solution that the alg begins with
+            k: the target quasi clique size
+        """
         state = self._get_state(current_S, k)
         data = self._create_data_from_state(state)
         with torch.no_grad():
@@ -136,6 +156,12 @@ class DeepTSQC(TSQC):
             return INDEX_TO_L[predicted_class]
 
     def _get_state(self, current_S, k):
+        """Helper method, to get the state prior to predicting L.
+        
+        args:
+            current_S: the current initial solution that the alg begins with
+            k: the target quasi clique size
+        """
         return {
             "graph_structure": {
                 "num_vertices": self._graph.num_vertices, 
@@ -148,6 +174,8 @@ class DeepTSQC(TSQC):
 
     @staticmethod
     def _create_data_from_state(state):
+        """Helper method to convert the state dictionary to a Data() object.
+        This allows for a forward pass through the trained GNN."""
         x = torch.tensor(state['state']['node_features'], dtype=torch.float)
         edge_index = torch.tensor(state['graph_structure']['edge_index'], dtype=torch.long)
         

@@ -25,9 +25,7 @@ class StateActionPair:
     action: Action
 
     def to_json(self) -> str:
-        """
-        Serialize this GraphData to a JSON-formatted string matching the desired structure.
-        """
+        """Serialize this Graph data to a JSON-formatted string matching the desired structure."""
         data_dict = asdict(self)
         try:
             return json.dumps(data_dict, separators=(",",":"), allow_nan=False)

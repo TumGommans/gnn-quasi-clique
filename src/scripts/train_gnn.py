@@ -14,7 +14,7 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support, con
 from torch_geometric.loader import DataLoader
 
 from src.gnn.model import SearchDepthGNN
-from src.gnn.train import train_epoch, eval_epoch, RestartDataset
+from src.gnn.train import train_epoch, RestartDataset
 
 os.environ["OMP_NUM_THREADS"] = "10"
 os.environ["MKL_NUM_THREADS"] = "10"

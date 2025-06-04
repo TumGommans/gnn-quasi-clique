@@ -55,7 +55,6 @@ class Graph:
         
         print(f"Synthetic graph initialized: {self.num_vertices} vertices, {self.num_edges} edges, Density: {self.density:.3f}")
 
-
     @property
     def vertices(self):
         return self._vertices
@@ -116,15 +115,11 @@ class Graph:
                     # Handle different formats
                     if len(parts) >= 2:
                         try:
-                            # Check if this is DIMACS format (starts with 'e')
                             if parts[0] == 'e' and len(parts) >= 3:
-                                # DIMACS format: "e node1 node2"
                                 u, v = int(parts[1]), int(parts[2])
                             elif parts[0] != 'e':
-                                # Direct format: "node1 node2"
                                 u, v = int(parts[0]), int(parts[1])
                             else:
-                                # Skip lines that start with 'e' but don't have enough parts
                                 continue
                             
                             if not checked_indexing:
@@ -132,7 +127,6 @@ class Graph:
                                     self._zero_indexed = True
                                 checked_indexing = True
                             
-                            # Add the edge (skip self-loops if desired)
                             if u != v:
                                 self.add_edge(u, v)
                                 
@@ -166,7 +160,7 @@ class Graph:
             self._num_edges += 1
             self._edge_index[0].append(u0)
             self._edge_index[1].append(v0)
-            self._core_numbers = None  # Reset cache when graph changes
+            self._core_numbers = None
 
     def get_neighbors(self, u):
         return self._adjacency_list.get(u, set())
@@ -212,37 +206,26 @@ class Graph:
         """
         if self._core_numbers is not None:
             return self._core_numbers
-        
-        # Initialize core numbers and degrees
         core_numbers = {}
         degrees = {}
         
-        # Initialize degrees and core numbers
         for v in self._vertices:
             degrees[v] = len(self._adjacency_list[v])
             core_numbers[v] = degrees[v]
         
-        # Create a list of vertices sorted by degree
         vertices_by_degree = sorted(self._vertices, key=lambda v: degrees[v])
-        
-        # Process vertices in order of increasing degree
         processed = set()
         
         for v in vertices_by_degree:
             if v in processed:
                 continue
-                
-            # Current core number is the minimum of current degree and existing core number
+
             current_core = min(degrees[v], core_numbers[v])
             core_numbers[v] = current_core
             processed.add(v)
-            
-            # Update degrees of unprocessed neighbors
             for neighbor in self._adjacency_list[v]:
                 if neighbor not in processed:
-                    # Remove the edge to this processed vertex
                     degrees[neighbor] = max(0, degrees[neighbor] - 1)
-                    # Update core number to be at most the current core
                     core_numbers[neighbor] = min(core_numbers[neighbor], max(current_core, degrees[neighbor]))
         
         self._core_numbers = core_numbers
@@ -255,9 +238,6 @@ class Graph:
         Args:
             node: The node for which to compute the degree into subset
             subset: Set/list of vertices defining the subset
-            
-        Returns:
-            int: Number of neighbors of 'node' that are in 'subset'
         """
         if node not in self._vertices:
             return 0
@@ -265,7 +245,6 @@ class Graph:
         subset_set = set(subset) if not isinstance(subset, set) else subset
         neighbors = self._adjacency_list.get(node, set())
         
-        # Count neighbors that are in the subset
         degree_into_subset = len(neighbors.intersection(subset_set))
         return degree_into_subset
 
@@ -292,15 +271,12 @@ class Graph:
     def get_node_features(self, subset, k, gamma):
         """
         Returns a 2D list where each row contains augmented features for each node:
-        [degree, clustering_coeff, dist_to_subset, density, k, gamma, core_number, degree_into_subset]
+        [degree, degree_into_subset, clustering_coeff, core_number, dist_to_subset, density, k, gamma]
         
         Args:
             subset: iterable of nodes defining the target set for shortest-path features
             k: parameter for the quasi-clique size
             gamma: parameter for the quasi-clique density
-            
-        Returns:
-            list: 2D list where each row represents features for a node (ordered by sorted node id)
         """
         core_numbers = self.compute_core_numbers()
         distances = self._bfs_multi_source(subset)
@@ -329,24 +305,6 @@ class Graph:
         
         return features
 
-    def get_feature_names(self):
-        """
-        Returns the names of the features returned by get_node_features.
-        
-        Returns:
-            list: List of feature names corresponding to each column
-        """
-        return [
-            'degree',
-            'clustering_coefficient', 
-            'distance_to_subset',
-            'graph_density',
-            'target_k',
-            'target_gamma',
-            'core_number',
-            'degree_into_subset'
-        ]
-
 def generate_synthetic_graph():
     """
     Generates a synthetic Graph instance with varying properties.
@@ -355,27 +313,20 @@ def generate_synthetic_graph():
     Returns:
         Graph: A synthetic graph instance with random structure
     """
-    # Vary the number of nodes significantly (10 to 200)
     num_nodes = random.randint(300, 1000)
-    
-    # Create different graph types with varying sparseness
     graph_type = random.choice(['sparse', 'medium', 'scale_free'])
     
     if graph_type == 'sparse':
-        # Very sparse: edge probability 0.01 to 0.05
         edge_prob = random.uniform(0.01, 0.05)
         edges = _generate_erdos_renyi_edges(num_nodes, edge_prob)
     
     elif graph_type == 'medium':
-        # Medium density: edge probability 0.1 to 0.3
         edge_prob = random.uniform(0.1, 0.3)
         edges = _generate_erdos_renyi_edges(num_nodes, edge_prob)
     
-    else:  # scale_free
-        # Create a scale-free network (power-law degree distribution)
+    else:
         edges = _generate_scale_free_graph(num_nodes)
     
-    # Randomly choose between 0-indexed and 1-indexed
     zero_indexed = random.choice([True, False])
     
     # Create and initialize the graph
@@ -385,7 +336,7 @@ def generate_synthetic_graph():
     return graph
 
 def _generate_erdos_renyi_edges(num_nodes, edge_prob):
-    """Generate edges for an Erdős–Rényi random graph."""
+    """Generate edges for an Erdos Renyi random graph."""
     edges = []
     for i in range(num_nodes):
         for j in range(i + 1, num_nodes):
@@ -401,7 +352,6 @@ def _generate_scale_free_graph(num_nodes):
     edges = []
     degrees = defaultdict(int)
     
-    # Start with a small complete graph
     initial_nodes = min(3, num_nodes)
     for i in range(initial_nodes):
         for j in range(i + 1, initial_nodes):
@@ -409,22 +359,17 @@ def _generate_scale_free_graph(num_nodes):
             degrees[i] += 1
             degrees[j] += 1
     
-    # Add remaining nodes with preferential attachment
     for new_node in range(initial_nodes, num_nodes):
-        # Number of edges to add (1-3)
         m = random.randint(1, min(3, new_node))
-        
-        # Calculate probabilities based on degrees
+    
         existing_nodes = list(range(new_node))
         if not existing_nodes:
             continue
             
         total_degree = sum(degrees[node] for node in existing_nodes)
         if total_degree == 0:
-            # If no degrees yet, connect randomly
             targets = random.sample(existing_nodes, min(m, len(existing_nodes)))
         else:
-            # Preferential attachment
             probs = [degrees[node] / total_degree for node in existing_nodes]
             targets = np.random.choice(existing_nodes, size=min(m, len(existing_nodes)), 
                                      replace=False, p=probs)
