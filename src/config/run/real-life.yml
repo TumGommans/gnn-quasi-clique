@@ -2,10 +2,11 @@
 
 methods:
   - "tsqc"
-  - "prr_tsqc"
+  - "cn-tsqc"
+  - "cum-sat-tsqc"
   - "deeptsqc"
 filepath: "data/real-life/"
-search_depth_L: 1000   
+search_depth_L: 1000
 max_iterations_It: 1000000
 time_limit: 600
 master_seed: 42

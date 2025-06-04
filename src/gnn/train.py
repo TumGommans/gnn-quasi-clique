@@ -45,16 +45,8 @@ class RestartDataset(Dataset):
             obj = json.loads(f.readline())
         x = torch.tensor(obj['state']['node_features'], dtype=torch.float)
         ei = torch.tensor(obj['graph_structure']['edge_index'], dtype=torch.long)
-        gf = obj['state']['graph_features']
-        u = torch.tensor([
-            gf['gamma'],
-            gf['initial_target_k'],
-            gf['current_target_k'],
-            gf['graph_density'],
-            gf['restart_count']
-        ], dtype=torch.float).unsqueeze(0)
         y = torch.tensor(obj['action']['optimal_L_index'], dtype=torch.long)
-        return Data(x=x, edge_index=ei, u=u, y=y)
+        return Data(x=x, edge_index=ei, y=y)
 
 def train_epoch(model, loader, opt, device, class_weights):
     model.train()

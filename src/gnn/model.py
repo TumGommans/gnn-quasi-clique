@@ -1,6 +1,5 @@
 """Script defining the GNN architecture to predict the search depth."""
 
-import torch
 import torch.nn.functional as F
 
 from torch import nn
@@ -13,13 +12,12 @@ class SearchDepthGNN(nn.Module):
     def __init__(
         self,
         node_feat_dim: int,
-        graph_feat_dim: int,
         hidden_dim: int,
         num_gin_layers: int,
         mlp_layers_per_gin: int,
-        final_mlp_layers: int,
-        readout: str,      
+        final_mlp_layers: int,  
         dropout: float,
+        readout: str,
         activation: str,
         num_classes: int
     ):
@@ -36,7 +34,9 @@ class SearchDepthGNN(nn.Module):
             for i in range(len(dims) - 1):
                 mlp.append(nn.Linear(dims[i], dims[i+1]))
                 mlp.append(self.act)
-            self.gin_layers.append(GINConv(nn.Sequential(*mlp)))
+            self.gin_layers.append(GINConv(
+                nn.Sequential(*mlp)
+            ))
             in_dim = hidden_dim
 
         self.bn_layers = nn.ModuleList([
@@ -44,12 +44,11 @@ class SearchDepthGNN(nn.Module):
             for _ in range(num_gin_layers)
         ])
 
-        self.bn_final = GraphNorm(hidden_dim+graph_feat_dim)
+        # self.bn_final = GraphNorm(hidden_dim+graph_feat_dim)
 
         # Final MLP
-        final_input_dim = hidden_dim + graph_feat_dim
         mlp = []
-        dims = [final_input_dim] + [hidden_dim] * final_mlp_layers + [num_classes]
+        dims = [hidden_dim] + [hidden_dim] * final_mlp_layers + [num_classes]
         for i in range(len(dims) - 1):
             mlp.append(nn.Linear(dims[i], dims[i+1]))
             if i < len(dims) - 2:
@@ -58,13 +57,13 @@ class SearchDepthGNN(nn.Module):
         self.final_mlp = nn.Sequential(*mlp)
 
     def forward(self, data):
-        x, edge_index, batch, u = data.x, data.edge_index, data.batch, data.u
+        x, edge_index, batch = data.x, data.edge_index, data.batch
         for i, conv in enumerate(self.gin_layers):
             x = conv(x, edge_index)         
-            # x = self.bn_layers[i](x) 
+            x = self.bn_layers[i](x) 
             x = self.act(x)
         x = self.pool(x, batch)
-        x = torch.cat([x, u], dim=1)
+        # x = torch.cat([x, u], dim=1)
 
         # x = self.bn_final(x)
 

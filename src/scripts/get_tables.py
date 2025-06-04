@@ -1,4 +1,4 @@
-"""Script for converting json results into LaTeX tables."""
+"""Script for converting json results into LaTeX tables, now including DeepTSQC."""
 
 import json, sys, os, yaml
 
@@ -25,46 +25,72 @@ def load_config(config_path):
         sys.exit(1)
 
 def format_objective(vals):
+    """Show max if equal to avg, else max(avg)."""
     mx = max(vals)
     avg = sum(vals) / len(vals)
     if mx == avg:
         return f"{mx}"
     return f"{mx}({avg:.1f})"
 
-def bold_runtimes(tsqc_times, prr_tsqc_times, bold_both=False, precision=1):
-    tsqc_avg = round(sum(tsqc_times) / len(tsqc_times),1)
-    prr_tsqc_avg = round(sum(prr_tsqc_times) / len(prr_tsqc_times),1)
-    tsqc_fmt = f"{tsqc_avg:.{precision}f}"
-    prr_fmt = f"{prr_tsqc_avg:.{precision}f}"
-    if bold_both:
-        if tsqc_avg < prr_tsqc_avg:
-            return f"\\textbf{{{tsqc_fmt}}}", prr_fmt
-        elif prr_tsqc_avg < tsqc_avg:
-            return tsqc_fmt, f"\\textbf{{{prr_fmt}}}"
-        else:
-            return f"\\textbf{{{tsqc_fmt}}}", f"\\textbf{{{prr_fmt}}}"
-    else:
-        return tsqc_fmt, prr_fmt
+def bold_max(tsqc_vals, prr_vals, deep_vals):
+    """
+    Bold any method whose max objective == global max.
+    Return triple of formatted objective strings and a flag if ≥2 tie.
+    """
+    # raw maxima
+    ts_max, pr_max, dp_max = max(tsqc_vals), max(prr_vals), max(deep_vals)
+    global_max = max(ts_max, pr_max, dp_max)
 
-def bold_max(tsqc_vals, prr_tsqc_vals):
-    tsqc_max = max(tsqc_vals)
-    prr_tsqc_max = max(prr_tsqc_vals)
-    tsqc_obj = format_objective(tsqc_vals)
-    prr_tsqc_obj = format_objective(prr_tsqc_vals)
-    if tsqc_max > prr_tsqc_max:
-        return (f"\\textbf{{{tsqc_obj}}}", f"{prr_tsqc_obj}"), False
-    elif tsqc_max < prr_tsqc_max:
-        return (f"{tsqc_obj}", f"\\textbf{{{prr_tsqc_obj}}}"), False
-    else:
-        return (f"\\textbf{{{tsqc_obj}}}", f"\\textbf{{{prr_tsqc_obj}}}"), True
+    # formatted objective text
+    ts_obj = format_objective(tsqc_vals)
+    pr_obj = format_objective(prr_vals)
+    dp_obj = format_objective(deep_vals)
+
+    # decide bolding
+    ts_best = ts_max == global_max
+    pr_best = pr_max == global_max
+    dp_best = dp_max == global_max
+
+    ts_str = f"\\textbf{{{ts_obj}}}" if ts_best else ts_obj
+    pr_str = f"\\textbf{{{pr_obj}}}" if pr_best else pr_obj
+    dp_str = f"\\textbf{{{dp_obj}}}" if dp_best else dp_obj
+
+    ts_str = "TL" if ts_obj == "0" else ts_str
+    pr_str = "TL" if ts_obj == "0" else pr_str
+    dp_str = "TL" if ts_obj == "0" else dp_str
+
+    # if two or more share top objective, we will bold the fastest runtime
+    bold_rts = sum((ts_best, pr_best, dp_best)) > 1
+
+    return (ts_str, pr_str, dp_str), bold_rts
+
+def bold_runtimes(tsqc_times, prr_times, deep_times, bold_flag=False, precision=1):
+    """
+    Compute average runtimes, format to given precision,
+    and if bold_flag, bold those equal to the minimum.
+    """
+    ts_avg = round(sum(tsqc_times) / len(tsqc_times), precision)
+    pr_avg = round(sum(prr_times) / len(prr_times), precision)
+    dp_avg = round(sum(deep_times) / len(deep_times), precision)
+
+    ts_fmt = f"{ts_avg:.{precision}f}"
+    pr_fmt = f"{pr_avg:.{precision}f}"
+    dp_fmt = f"{dp_avg:.{precision}f}"
+
+    if bold_flag:
+        mn = min(ts_avg, pr_avg, dp_avg)
+        if ts_avg == mn: ts_fmt = f"\\textbf{{{ts_fmt}}}"
+        if pr_avg == mn: pr_fmt = f"\\textbf{{{pr_fmt}}}"
+        if dp_avg == mn: dp_fmt = f"\\textbf{{{dp_fmt}}}"
+
+    return ts_fmt, pr_fmt, dp_fmt
 
 def get_gamma_values(data):
     gamma_values = set()
     for entry in data.values():
         for key in entry:
             try:
-                val = float(key)
-                gamma_values.add(val)
+                gamma_values.add(float(key))
             except ValueError:
                 pass
     return sorted(gamma_values)
@@ -78,16 +104,11 @@ for path in ("results/dimacs/dimacs.json", "results/real-life/real_life.json"):
         continue
 
     instances = sorted(data.keys())
-
     config = load_config(CONFIG_PATHS[path])
     gamma_values = [str(gam) for gam in config["gamma"]]
 
     out_dir = os.path.dirname(path)
-
-    json_name = os.path.basename(path)            
-    base, ext = os.path.splitext(json_name)
-    tex_name = base + '.tex' 
-
+    tex_name = os.path.splitext(os.path.basename(path))[0] + '.tex'
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, tex_name)
 
@@ -114,45 +135,50 @@ for path in ("results/dimacs/dimacs.json", "results/real-life/real_life.json"):
     }
     \end{table}"""
 
-    # Build table lines
     lines = [header]
-    newline = "\\\\"
+    newline = r"\\"
 
-    for inst in instances:
+    for i, inst in enumerate(instances):
         info = data[inst]
         nv = info['num_vertices']
         rho = info['density']
         first_gamma = True
+        inst_name = inst.replace("_", " ").lower()
 
-        inst_name_formatted = inst.replace("_", " ").lower()
         for gamma in gamma_values:
             tsqc = info[gamma]['tsqc']
-            prr_tsqc = info[gamma]['prr_tsqc']
+            prr  = info[gamma]['prr_tsqc']
+            dp   = info[gamma]['deeptsqc']
 
-            # Get bolded objectives and whether both are bolded
-            (obj_tsqc_str, obj_prr_tsqc_str), bold_rts = bold_max(
-                tsqc['objectives'], 
-                prr_tsqc['objectives']
+            # determine bolding for objectives
+            (obj_ts, obj_pr, obj_dp), tie_on_obj = bold_max(
+                tsqc['objectives'],
+                prr['objectives'],
+                dp['objectives']
             )
-            # Get bolded runtimes if needed
-            rt_tsqc_str, rt_prr_tsqc_str = bold_runtimes(
-                tsqc['runtimes'], prr_tsqc['runtimes'], bold_both=bold_rts
+            # determine bolding for runtimes
+            rt_ts, rt_pr, rt_dp = bold_runtimes(
+                tsqc['runtimes'],
+                prr['runtimes'],
+                dp['runtimes'],
+                bold_flag=tie_on_obj
             )
-            dash = "--"
-            
+
             if first_gamma:
-                prefix = f"{inst_name_formatted} & {nv} & {rho:.3f} & {gamma}"
+                prefix = f"{inst_name} & {nv} & {rho:.3f} & {gamma}"
                 first_gamma = False
             else:
-                prefix = f"& & & {gamma}"
-            
-            rest = f"& & {obj_tsqc_str} & {obj_prr_tsqc_str} & {dash} & & {rt_tsqc_str} & {rt_prr_tsqc_str} & {dash}"
+                prefix = "& & & " + gamma
+            rest = (
+                f"& & {obj_ts} & {obj_pr} & {obj_dp} "
+                f"& & {rt_ts} & {rt_pr} & {rt_dp}"
+            )
             lines.append(f"{prefix} {rest} {newline}")
-        lines.append('')
+
+        if i < len(instances) - 1:lines.append(r"\midrule")
 
     lines.append(footer)
 
-    # Write to .tex file
     with open(out_path, 'w') as f:
         f.write("\n".join(lines))
 

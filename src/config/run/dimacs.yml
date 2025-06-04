@@ -2,7 +2,8 @@
 
 methods:
   - "tsqc"
-  - "prr_tsqc"
+  - "cn-tsqc"
+  - "cum-sat-tsqc"
   - "deeptsqc"
 filepath: "data/dimacs/"
 search_depth_L: 1000   
@@ -12,6 +13,7 @@ master_seed: 42
 gamma:
   - 0.85
   - 0.95
+  - 1.00
 k:
   0.85:
     brock200-2: 19
@@ -21,6 +23,8 @@ k:
     hamming8-4: 35
     keller4: 31
     keller5: 286
+    p-hat300-1: 12
+    p-hat300-2: 85
     p-hat300-3: 180
     p-hat700-1: 19
     p-hat700-2: 223
@@ -35,9 +39,27 @@ k:
     hamming8-4: 17
     keller4: 15
     keller5: 47
+    p-hat300-1: 9
+    p-hat300-2: 41
     p-hat300-3: 71
     p-hat700-1: 13
     p-hat700-2: 96
     p-hat700-3: 176
     p-hat1500-2: 193
     p-hat1500-3: 351
+  1.00:
+    brock200-2: 12
+    brock200-4: 17
+    brock400-2: 29
+    brock400-4: 33
+    hamming8-4: 16
+    keller4: 11
+    keller5: 27
+    p-hat300-1: 8
+    p-hat300-2: 25
+    p-hat300-3: 36
+    p-hat700-1: 11
+    p-hat700-2: 44
+    p-hat700-3: 62
+    p-hat1500-2: 65
+    p-hat1500-3: 94

@@ -1,7 +1,6 @@
 # Config file containing GNN hyperparameters.
 
 node_feat_dim: 5
-graph_feat_dim: 5
 
 hidden_dim: 128
 num_gin_layers: 3       

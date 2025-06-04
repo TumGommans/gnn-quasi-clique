@@ -9,10 +9,9 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 from src.utils.graph import Graph
-from src.algorithms.tsqc_prr import PRR_TSQC
 from src.algorithms.tsqc import TSQC
 
-CONFIG_FILE_PATH = "src/config/single-run.yml"
+CONFIG_FILE_PATH = "src/config/run/single-run.yml"
 
 def load_config(config_path):
     """Loads configuration from a YAML file."""
@@ -185,16 +184,17 @@ def main():
         return
 
     print("Initializing TSQC...")
-    tsqc_algo = PRR_TSQC(
+    tsqc_algo = TSQC(
         graph=custom_graph_obj,
         gamma=gamma_val,
         max_iterations_It=max_iterations_val,
         search_depth_L=search_depth_val,
-        best_known=True
+        best_known=True,
+        cooccurrence_config_path="src/config/run/memory-matrix.yml"
     )
-
+    
     print("Starting TSQC process...")
-    best_clique_nodes, _ = tsqc_algo.solve(initial_k=initial_k_val)
+    best_clique_nodes, _ = tsqc_algo.solve(initial_k=initial_k_val, use_cooccurrence_matrix=True)
 
     print("\n--- Final Result ---")
     if best_clique_nodes and len(best_clique_nodes) > 0 :
@@ -203,7 +203,7 @@ def main():
             found_clique_size = tsqc_algo.best_quasi_clique_size
 
         print(f"Largest {gamma_val}-quasi-clique found has size: {found_clique_size}")
-        visualize_quasi_clique(custom_graph_obj, best_clique_nodes, gamma_val, filepath)
+        # visualize_quasi_clique(custom_graph_obj, best_clique_nodes, gamma_val, filepath)
     else:
         print(f"No satisfying {gamma_val}-quasi-clique found by the TSQC algorithm within the given parameters.")
 

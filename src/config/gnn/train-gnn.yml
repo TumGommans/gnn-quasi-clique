@@ -1,22 +1,24 @@
 # Config file containing training hyperparameters.
 
 data_path: "data/training/state_action_pairs.jsonl"
-train_val_split: 0.8
+train_val_split: 0.9
 
 # Hyperparameter optimization
 use_manual_params: False
+node_feat_dim: 8
+num_classes: 3
 max_evals: 50
 hyperopt_space:
   num_gin_layers:     [2, 3, 4, 5]
   hidden_dim:         [32, 64, 128]
   mlp_layers_per_gin: [2, 3]
   final_mlp_layers:   [2, 3]
-  readout:            [sum, mean, max]
-  activation:         [ReLU, ELU, LeakyReLU]
+  readout:            [sum, mean]
+  activation:         [ReLU]
   dropout:            {min: 0.0, max: 0.5}
   lr:                 {min: -9.21, max: -4.61}
   batch_size:         [32, 64, 128]
   epochs:             [50, 100, 150]
 
 # Path to save final weights
-output_path: "data/gnn-weights/gnn_weights.pth"
+output_path: "results/gnn/gnn_weights.pth"

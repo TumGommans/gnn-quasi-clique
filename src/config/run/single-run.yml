@@ -1,8 +1,8 @@
 # Config for running the TSQC algorithm for a single instance
 
-graph_filepath: "data/real-life/email.txt"
-gamma: 0.6
-initial_k: 20
+graph_filepath: "data/dimacs/p-hat300-1.txt"
+gamma: 0.85
+initial_k: 12
 search_depth_L: 1000   
 max_iterations_It: 100000000
 random_seed: null

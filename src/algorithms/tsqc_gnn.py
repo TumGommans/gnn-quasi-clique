@@ -56,6 +56,7 @@ class DeepTSQC(TSQC):
 
             if is_first_attempt_for_k:
                 current_S = self._generate_initial_solution(k)
+                L = self._predict_L(current_S, k)
                 is_first_attempt_for_k = False
             else:
                 current_S = self._default_restart_strategy(k)
@@ -67,8 +68,6 @@ class DeepTSQC(TSQC):
             restart_counter = 1
             while iteration_count_It < self._It_max:
                 print(f"  Calling TSQ for k={k} (Starts at Global It: {iteration_count_It})")
-
-                L = self._predict_L(current_S, k, restart_counter)
 
                 tsq = TSQ(
                     graph=self._graph,
@@ -128,29 +127,22 @@ class DeepTSQC(TSQC):
 
         return self.best_quasi_clique_found, best_runtime_found
 
-    def _predict_L(self, current_S, k, restart_counter):
-        state = self._get_state(current_S, k, restart_counter)
+    def _predict_L(self, current_S, k):
+        state = self._get_state(current_S, k)
         data = self._create_data_from_state(state)
         with torch.no_grad():
             output = self._gnn(data)
             predicted_class = output.argmax(dim=-1).item()
             return INDEX_TO_L[predicted_class]
 
-    def _get_state(self, current_S, k, restart_counter):
+    def _get_state(self, current_S, k):
         return {
             "graph_structure": {
                 "num_vertices": self._graph.num_vertices, 
                 "edge_index": self._graph.edge_index
             }, 
             "state": {
-                "node_features": self._graph.get_node_features(current_S, self._g_freq), 
-                "graph_features": {
-                    "gamma": self._gamma, 
-                    "initial_target_k": self._initial_k,
-                    "current_target_k": k, 
-                    "graph_density": self._graph.density,
-                    "restart_count": restart_counter
-                }
+                "node_features": self._graph.get_node_features(current_S, self._gamma, k), 
             }
         }
 
@@ -158,13 +150,5 @@ class DeepTSQC(TSQC):
     def _create_data_from_state(state):
         x = torch.tensor(state['state']['node_features'], dtype=torch.float)
         edge_index = torch.tensor(state['graph_structure']['edge_index'], dtype=torch.long)
-        gf = state['state']['graph_features']
-        u = torch.tensor([
-            gf['gamma'],
-            gf['initial_target_k'],
-            gf['current_target_k'],
-            gf['graph_density'],
-            gf['restart_count']
-        ], dtype=torch.float).unsqueeze(0)
         
-        return Data(x=x, edge_index=edge_index, u=u)
+        return Data(x=x, edge_index=edge_index)

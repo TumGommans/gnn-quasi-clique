@@ -1,5 +1,5 @@
 {
-  "name": "bsc-thesis-quasi-clique",
+  "name": "gnn-quasi-clique",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."

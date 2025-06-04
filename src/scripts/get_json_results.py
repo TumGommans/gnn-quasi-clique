@@ -9,17 +9,17 @@ import torch
 
 from src.utils.graph import Graph
 from src.algorithms.tsqc import TSQC
-from src.algorithms.tsqc_prr import PRR_TSQC
 from src.algorithms.tsqc_gnn import DeepTSQC
 
 from src.gnn.model import SearchDepthGNN
 
+INDEX_TO_L = {0: 500, 1: 1000, 2: 5000}
 
-CONFIG_PATH_DIMACS = "src/config/dimacs.yml"
-CONFIG_PATH_REAL_LIFE = "src/config/real-life.yml"
+CONFIG_PATH_DIMACS = "src/config/run/dimacs.yml"
+CONFIG_PATH_REAL_LIFE = "src/config/run/real-life.yml"
 
-HYPERPARAMETER_PATH = "results/gnn-params/hyperparameters.json"
-WEIGHTS_PATH = "results/gnn-params/gnn_weights.pth"
+HYPERPARAMETER_PATH = "results/gnn/hyperparameters.json"
+WEIGHTS_PATH = "results/gnn/gnn_weights.pth"
 
 def load_config(config_path):
     """Loads configuration from a YAML file."""
@@ -133,8 +133,12 @@ def get_results(path):
                             best_known=True,
                             time_limit=time_limit
                         )
-                    elif method == "prr_tsqc":
-                        tsqc = PRR_TSQC(
+                        print("Starting TSQC process...")
+                        best_clique_nodes, time = tsqc.solve(
+                            initial_k=k_values[gamma_val][instance_name],
+                        )
+                    elif method == "cn-tsqc":
+                        tsqc = TSQC(
                             graph=custom_graph_obj,
                             gamma=gamma_val,
                             max_iterations_It=max_iterations_val,
@@ -142,6 +146,41 @@ def get_results(path):
                             rng=random.Random(seeds[i]),
                             best_known=True,
                             time_limit=time_limit
+                        )
+                        print("Starting TSQC process...")
+                        best_clique_nodes, time = tsqc.solve(
+                            initial_k=k_values[gamma_val][instance_name],
+                            use_common_neighbors=True
+                        )
+                    elif method == "am-tsqc":
+                        tsqc = TSQC(
+                            graph=custom_graph_obj,
+                            gamma=gamma_val,
+                            max_iterations_It=max_iterations_val,
+                            search_depth_L=search_depth_val,
+                            rng=random.Random(seeds[i]),
+                            best_known=True,
+                            time_limit=time_limit
+                        )
+                        print("Starting TSQC process...")
+                        best_clique_nodes, time = tsqc.solve(
+                            initial_k=k_values[gamma_val][instance_name],
+                            use_cooccurrence_matrix=True
+                        )
+                    elif method == "cum-sat-tsqc":
+                        tsqc = TSQC(
+                            graph=custom_graph_obj,
+                            gamma=gamma_val,
+                            max_iterations_It=max_iterations_val,
+                            search_depth_L=search_depth_val,
+                            rng=random.Random(seeds[i]),
+                            best_known=True,
+                            time_limit=time_limit
+                        )
+                        print("Starting TSQC process...")
+                        best_clique_nodes, time = tsqc.solve(
+                            initial_k=k_values[gamma_val][instance_name],
+                            use_cum_saturation=True
                         )
                     else:
                         tsqc = DeepTSQC(
@@ -153,9 +192,8 @@ def get_results(path):
                             best_known=True,
                             time_limit=time_limit
                         )                   
-
-                    print("Starting TSQC process...")
-                    best_clique_nodes, time = tsqc.solve(initial_k=k_values[gamma_val][instance_name])
+                        print("Starting TSQC process...")
+                        best_clique_nodes, time = tsqc.solve(initial_k=k_values[gamma_val][instance_name])
 
                     print("\n--- Final Result ---")
                     if best_clique_nodes and len(best_clique_nodes) > 0 :
@@ -184,8 +222,7 @@ def get_gnn_from_config():
 
     # Initialize model with best hyperparameters
     model = SearchDepthGNN(
-        node_feat_dim=5,
-        graph_feat_dim=5,
+        node_feat_dim=8,
         hidden_dim=int(hyperparams['hidden_dim']),
         num_gin_layers=int(hyperparams['num_gin_layers']),
         mlp_layers_per_gin=int(hyperparams['mlp_layers_per_gin']),
@@ -197,7 +234,7 @@ def get_gnn_from_config():
     )
 
     # Load trained weights
-    model.load_state_dict(torch.load('results/gnn-params/gnn_weights.pth', map_location='cpu'))
+    model.load_state_dict(torch.load(WEIGHTS_PATH, map_location='cpu'))
     return model
 
 for path in (CONFIG_PATH_REAL_LIFE, CONFIG_PATH_DIMACS):

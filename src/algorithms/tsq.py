@@ -4,6 +4,8 @@ import random
 import math
 from collections import defaultdict
 
+from src.utils.memory_matrix import AdaptiveMemoryMatrix
+
 class TSQ:
     """
     Implements the core Tabu Search procedure.
@@ -11,7 +13,22 @@ class TSQ:
     Find a k-gamma-quasi-clique, starting from an initial solution.
     This represents the inner loop called by the main TSQC algorithm.
     """
-    def __init__(self, graph, gamma, k, L, initial_S, current_It, update_freq_method, max_total_It, rng=None):
+    def __init__(
+            self, 
+            graph, 
+            gamma,
+            k,
+            L, 
+            initial_S, 
+            current_It, 
+            update_freq_method, 
+            max_total_It, 
+            rng=None,
+            use_cum_saturation=False,
+            use_common_neighbors=False,
+            use_cooccurrence_matrix=False,
+            cooccurrence_config_path=None
+        ):
         """
         Initializes the TSQ search object.
 
@@ -24,7 +41,14 @@ class TSQ:
             current_It (int):              The current global iteration count (for max check and tabu).
             update_freq_method (callable): Method from TSQC to update frequency memory.
             max_total_It (int):            The overall maximum iteration limit.
+            use_cum_saturation (bool):     Whether to use cumulative saturation tie-breaking.
+            use_common_neighbors (bool):   Whether to use common neighbors tie-breaking.
         """
+        # Check that both tie-breaking mechanisms are not enabled simultaneously
+        tie_breaking_methods = sum([use_cum_saturation, use_common_neighbors, use_cooccurrence_matrix])
+        if tie_breaking_methods > 1:
+            raise ValueError("Cannot enable multiple tie-breaking mechanisms simultaneously")
+        
         self._graph = graph
         self._gamma = gamma
         self._k = k
@@ -45,6 +69,28 @@ class TSQ:
 
         self.intensification_count = 0
         self.tie_breaker_count = 0
+
+        # Cumulative saturation
+        self._use_cum_saturation = use_cum_saturation
+        if self._use_cum_saturation:
+            # Maximum degree ∆G
+            self._DeltaG = max(len(graph.get_neighbors(v)) for v in graph.vertices)
+            self._cum_sat = {v: 0 for v in graph.vertices}
+            # track last-change step t0(v) and TS(v)
+            self._last_change = {v: 0 for v in graph.vertices}
+            self._time_in_S = defaultdict(int)
+
+        # Common neighbors tie-breaking
+        self._use_common_neighbors = use_common_neighbors
+
+        self._use_cooccurrence_matrix = use_cooccurrence_matrix
+        if self._use_cooccurrence_matrix:
+            self._cooccurrence_matrix = AdaptiveMemoryMatrix(
+                num_vertices=self._graph.num_vertices,
+                config_path=cooccurrence_config_path
+            )
+            print(f"    Initialized co-occurrence matrix with {len(graph.vertices)} vertices")
+
 
     def run(self):
         """ Executes the TSQ procedure. """
@@ -70,6 +116,10 @@ class TSQ:
                 print("    TSQ Stop: Global max iterations reached.")
                 break
 
+            # Update cumulative saturation before each iteration
+            if self._use_cum_saturation:
+                self._update_cumulative_saturation(current_global_It)
+
             degrees_in_S = self._calculate_all_degrees_relative_to_S(self._S)
             A, B, MinInS, MaxOutS = self._determine_critical_sets(self._S, degrees_in_S, current_global_It)
 
@@ -93,10 +143,15 @@ class TSQ:
                 edge_exists = 1 if self._graph.has_edge(u_selected, v_selected) else 0
                 delta_uv = degrees_in_S.get(v_selected, 0) - degrees_in_S.get(u_selected, 0) - edge_exists
 
+                # Update cumulative saturation tracking before the swap
+                if self._use_cum_saturation:
+                    self._update_vertex_state_change(u_selected, v_selected, current_global_It)
+
                 self._S.remove(u_selected)
                 self._S.add(v_selected)
                 self._f_S += delta_uv
 
+                # self._update_cooccurrence_matrix()
                 self._update_frequency(u_selected, v_selected, self._k)
 
                 tabu_tenure_u, tabu_tenure_v = self._calculate_tabu_tenures(self._k, self._f_S)
@@ -127,6 +182,89 @@ class TSQ:
         return self._S_star, self._iterations_consumed
 
 # ------------------------------------------------------------------------------------------------------------
+# Common Neighbors Tie-Breaking Methods
+# ------------------------------------------------------------------------------------------------------------
+
+    def _calculate_common_neighbors_score(self, u, v):
+        """
+        Calculate the common neighbors score s1(u,v) for a swap.
+        
+        Args:
+            u: Vertex to be removed from S
+            v: Vertex to be added to S
+            
+        Returns:
+            int: Size of union of neighbors of all vertices in S' where S' = (S \ {u}) ∪ {v}
+        """
+        if not self._use_common_neighbors:
+            return 0
+        
+        # Create S' = (S \ {u}) ∪ {v}
+        S_prime = (self._S - {u}) | {v}
+        
+        # Calculate CN(S') = (∪_{w∈S'} N(w)) \ S'
+        common_neighbors = set()
+        for w in S_prime:
+            common_neighbors.update(self._graph.get_neighbors(w))
+        
+        # Remove vertices that are in S'
+        common_neighbors -= S_prime
+        
+        return len(common_neighbors)
+
+# ------------------------------------------------------------------------------------------------------------
+# Cumulative Saturation Methods
+# ------------------------------------------------------------------------------------------------------------
+
+    def _calculate_saturation(self, v):
+        """Calculate Γt(v) - saturation of vertex v at current step."""
+        if not self._use_cum_saturation:
+            return 0
+        
+        saturation = 0
+        for neighbor in self._graph.get_neighbors(v):
+            # An edge is critical if exactly one endpoint is in S (λ(e) = 1)
+            if (neighbor in self._S) != (v in self._S):
+                saturation += 1
+        return saturation
+
+    def _update_cumulative_saturation(self, current_step):
+        """Update cumulative saturation for all vertices at current step."""
+        if not self._use_cum_saturation:
+            return
+        
+        for v in self._graph.vertices:
+            current_saturation = self._calculate_saturation(v)
+            
+            # Update time in S counter
+            if v in self._S:
+                self._time_in_S[v] += 1
+            
+            # Add current saturation to cumulative
+            self._cum_sat[v] += current_saturation
+            
+            # For vertices in S, subtract ΔG offset
+            if v in self._S:
+                self._cum_sat[v] -= self._DeltaG
+
+    def _update_vertex_state_change(self, u_removed, v_added, current_step):
+        """Update tracking when vertices change state (added/removed from S)."""
+        if not self._use_cum_saturation:
+            return
+        
+        # Reset tracking for vertices that change state
+        self._last_change[u_removed] = current_step
+        self._last_change[v_added] = current_step
+        self._time_in_S[u_removed] = 0
+        self._time_in_S[v_added] = 0
+
+    def _get_cumulative_saturation_score(self, v):
+        """Get the cumulative saturation score Γ(v) for vertex v."""
+        if not self._use_cum_saturation:
+            return 0
+        return self._cum_sat[v]
+
+# ------------------------------------------------------------------------------------------------------------
 # Intensification & Diversification Helpers
 # ------------------------------------------------------------------------------------------------------------
 
@@ -147,13 +285,83 @@ class TSQ:
         return None, None
 
     def _select_swap_tie_breaking(self, swap_candidates):
-        """Selects a swap from candidates (default: random)."""
-        if not swap_candidates: return None, None
+        """Selects a swap from candidates using tie-breaking mechanisms."""
+        if not swap_candidates: 
+            return None, None
 
         self.intensification_count += 1
         if len(swap_candidates) > 1:
             self.tie_breaker_count += 1
 
+        # Common neighbors tie-breaking
+        if self._use_common_neighbors and len(swap_candidates) > 1:
+            best_score = float('-inf')
+            best_swaps = []
+            
+            for u, v in swap_candidates:
+                score = self._calculate_common_neighbors_score(u, v)
+                
+                if score > best_score:
+                    best_score = score
+                    best_swaps = [(u, v)]
+                elif score == best_score:
+                    best_swaps.append((u, v))
+            
+            # If we still have ties after common neighbors, break randomly
+            return self._rng.choice(best_swaps) if self._rng else random.choice(best_swaps)
+
+        # Cumulative saturation tie-breaking
+        if self._use_cum_saturation and len(swap_candidates) > 1:
+            # Calculate Γ(v) - Γ(u) for each swap candidate (u out, v in)
+            best_score = float('-inf')
+            best_swaps = []
+            
+            for u, v in swap_candidates:
+                # u is being removed (outgoing), v is being added (incoming)
+                gamma_v = self._get_cumulative_saturation_score(v)
+                gamma_u = self._get_cumulative_saturation_score(u)
+                score = gamma_v - gamma_u
+                
+                if score > best_score:
+                    best_score = score
+                    best_swaps = [(u, v)]
+                elif score == best_score:
+                    best_swaps.append((u, v))
+            
+            # If we still have ties after cumulative saturation, break randomly
+            return self._rng.choice(best_swaps) if self._rng else random.choice(best_swaps)
+        
+        # Co-occurrence matrix tie-breaking
+        if self._use_cooccurrence_matrix and len(swap_candidates) > 1:
+            best_score = float('-inf')
+            best_swaps = []
+            
+            for u, v in swap_candidates:
+                score = self._cooccurrence_matrix.calculate_tie_breaking_score(
+                    u=u, 
+                    v=v, 
+                    current_S=self._S
+                )
+                
+                if score > best_score:
+                    best_score = score
+                    best_swaps = [(u, v)]
+                elif abs(score - best_score) < 1e-9:  # Handle floating point comparison
+                    best_swaps.append((u, v))
+            
+            # If we still have ties after co-occurrence matrix, break randomly
+            selected_swap = self._rng.choice(best_swaps) if self._rng else random.choice(best_swaps)
+            
+            # Optional: Print tie-breaking statistics periodically
+            if self.intensification_count % 100 == 0:
+                stats = self._cooccurrence_matrix.get_matrix_stats()
+                print(f"    Co-occurrence Matrix Stats (It {self.intensification_count}): "
+                    f"Sparsity: {stats['matrix_sparsity']:.3f}, "
+                    f"Best Quality: {stats['f_best']:.1f}, "
+                    f"Burn-in: {'Complete' if stats['burn_in_complete'] else 'In Progress'}")
+            
+            return selected_swap
+        # Default: random selection from all candidates
         return self._rng.choice(swap_candidates) if self._rng else random.choice(swap_candidates)
 
     def _diversification_select_swap(self, A, B, best_swaps_T, degrees_in_S):
@@ -279,3 +487,19 @@ class TSQ:
             degrees[v] = len(self._graph.get_neighbors(v).intersection(S))
 
         return degrees
+
+    # Add this method to update the co-occurrence matrix after each iteration:
+    def _update_cooccurrence_matrix(self):
+        """Update the co-occurrence matrix with current solution quality."""
+        if self._use_cooccurrence_matrix:
+            self._cooccurrence_matrix.update_solution_quality(
+                solution=self._S,
+                quality=self._f_S
+            )
+
+    # Add method to get co-occurrence matrix statistics:
+    def get_cooccurrence_stats(self):
+        """Get statistics about the co-occurrence matrix (if enabled)."""
+        if self._use_cooccurrence_matrix:
+            return self._cooccurrence_matrix.get_matrix_stats()
+        return None

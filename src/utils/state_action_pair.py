@@ -10,17 +10,8 @@ class GraphStructure:
     edge_index: List[List[int]]
 
 @dataclass
-class GraphFeatures:
-    gamma: float
-    initial_target_k: int
-    current_target_k: int
-    graph_density: float
-    restart_count: int
-
-@dataclass
 class State:
     node_features: List[List[float]]
-    graph_features: GraphFeatures
 
 @dataclass
 class Action:
