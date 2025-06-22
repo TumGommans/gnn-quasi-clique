@@ -18,8 +18,13 @@ class Graph:
         self._num_edges = 0
         self._zero_indexed = False
         self._core_numbers = None
+        self._distances = {}
 
-    def initialize_synthetic(self, edges, zero_indexed=True):
+    def initialize_synthetic(
+        self, 
+        edges: list[tuple[int]], 
+        zero_indexed: bool = True
+    ):
         """
         Initialize the graph with synthetic edge data.
         
@@ -77,7 +82,7 @@ class Graph:
 
     @property
     def edge_index(self):
-        """Considering node_features are built on sorted vertices, need to map the edge indices the same."""
+        # Considering node_features are built on sorted vertices, need to map the edge indices the same.
         vertices_sorted = sorted(self._vertices)
         id_2_idx = {v:i for i,v in enumerate(vertices_sorted)}
         return [
@@ -85,20 +90,24 @@ class Graph:
             [id_2_idx[v] for v in self._edge_index[1]],
         ]
 
-    def load_from_edgelist_file(self, filepath):
+    def load_from_edgelist_file(self, filepath: str):
         """
-        Loads graph data from an edge list file. Supports two formats:
+        Loads graph data from an edge list file and extracts features. Supports two formats:
         1. Direct format: "node1 node2" per line (e.g., brock200-2.txt)
         2. DIMACS format: "e node1 node2" per line (e.g., p_hat300-1.txt)
         
         Skips malformed lines and self-loops.
         Builds adjacency list and edge_index (0-based).
+
+        args:
+            filepath: location at which the edge list is located
         """
         self._adjacency_list.clear()
         self._vertices.clear()
         self._edge_index = [[], []]
         self._num_edges = 0
-        self._core_numbers = None  # Reset cache
+        self._core_numbers = None
+        self._cluster_coeffs = {}
         line_num = 0
 
         checked_indexing = False
@@ -141,13 +150,24 @@ class Graph:
         except Exception as e:
             print(f"Error loading graph: {e}")
             raise
-            
+
+        self._core_numbers = self.compute_core_numbers()
+        for u in sorted(self._vertices):
+            self._cluster_coeffs[u] = self.clustering_coefficient(u)
+        
         print(f"Graph loaded: {self.num_vertices} vertices, {self.num_edges} edges, Density: {self.density:.3f}")
 
-    load_from_csv = load_from_edgelist_file
-
-    def add_edge(self, u, v):
-        """Adds an undirected edge between u and v."""
+    def add_edge(
+        self, 
+        u: int, 
+        v: int
+    ):
+        """Adds an undirected edge between u and v.
+        
+        args:
+            u: one of the nodes participating in the edge
+            v: one of the nodes participating in the edge
+        """
         if self._zero_indexed:
             u0, v0 = u, v
         else:
@@ -162,13 +182,41 @@ class Graph:
             self._edge_index[1].append(v0)
             self._core_numbers = None
 
-    def get_neighbors(self, u):
+    def get_neighbors(self, u: int) -> set[int]:
+        """
+        Returns the neighborhood of a node
+        
+        args:
+            u: the node for which the N(u) is extracted
+        """
         return self._adjacency_list.get(u, set())
 
-    def has_edge(self, u, v):
+    def has_edge(self, u: int, v: int) -> bool:
+        """
+        Checkes whether an edge is present between two nodes.
+        
+        args:
+            u: one of the nodes potentially participating in the edge
+            v: one of the nodes potentially participating in the edge
+        
+        returns:
+            bool: whether edge (u,v) is present
+        """
         return v in self._adjacency_list.get(u, set())
 
-    def get_induced_subgraph_edges(self, subset):
+    def get_induced_subgraph_edges(
+        self, 
+        subset: set[int]
+    ) -> int:
+        """
+        Compute the number of edges in the induced subgraph.
+        
+        args:
+            subset: the vertices of the induced subgraph
+        
+        returns:
+            count: the number of edges in the induced subgraph
+        """
         count = 0
         subset_list = list(subset)
         for i in range(len(subset_list)):
@@ -179,10 +227,15 @@ class Graph:
                     count += 1
         return count
 
-    def clustering_coefficient(self, u):
+    def clustering_coefficient(self, u: int) -> float:
         """
-        Computes the clustering coefficient for node u:
-        (# of links between neighbors) / (k * (k - 1) / 2)
+        Computes the clustering coefficient: (# of links between neighbors) / (d(u) * (d(u) - 1) / 2).
+
+        args:
+            u: node for which to compute C(u)
+        
+        returns:
+            float: value of C(u) according to Definition 4 in the thesis
         """
         neighbors = self._adjacency_list.get(u, set())
         k = len(neighbors)
@@ -196,13 +249,15 @@ class Graph:
                     links += 1
         return (2 * links) / (k * (k - 1))
 
-    def compute_core_numbers(self):
+    def compute_core_numbers(self) -> dict[int, int]:
         """
-        Computes the core number (k-core) for each vertex using the standard algorithm.
-        Returns a dictionary mapping vertex -> core number.
+        Computes the core number k-core for each vertex using the standard algorithm.
         
         The core number of a vertex is the maximum k such that the vertex exists in a k-core,
         where a k-core is a maximal subgraph in which each vertex has at least k neighbors.
+
+        returns:
+            core_numbers: dictionary mapping each vertex in the graph to its core number
         """
         if self._core_numbers is not None:
             return self._core_numbers
@@ -231,13 +286,20 @@ class Graph:
         self._core_numbers = core_numbers
         return core_numbers
 
-    def get_degree_into_subset(self, node, subset):
+    def get_degree_into_subset(
+        self, 
+        node: int, 
+        subset: set[int]
+    ) -> int:
         """
         Computes the degree of a node into a given subset of vertices.
         
-        Args:
+        args:
             node: The node for which to compute the degree into subset
-            subset: Set/list of vertices defining the subset
+            subset: set of vertices defining the subset
+        
+        returns:
+            degree_into_subset: the degree of the node wrt the subset
         """
         if node not in self._vertices:
             return 0
@@ -248,11 +310,16 @@ class Graph:
         degree_into_subset = len(neighbors.intersection(subset_set))
         return degree_into_subset
 
-    def _bfs_multi_source(self, subset):
+    def _bfs_multi_source(self, subset: set[int]) -> dict[int, int]:
         """
-        Performs a multi-source BFS from all nodes in subset.
-        Returns a dict node -> shortest distance to any subset node.
-        Unreachable nodes are omitted (or can be treated as infinite).
+        Computes the shortest paths for all nodes into the subset, using
+        a multi-source BFS (breadth-first search)
+
+        args:
+            subset: the subset to which the distances are related
+        
+        returns:
+            distances: dictionary mapping a node to its shortest path to any node in subset
         """
         distances = {}
         queue = deque()
@@ -268,30 +335,30 @@ class Graph:
                     queue.append(v)
         return distances
 
-    def get_node_features(self, subset, k, gamma):
+    def get_node_features(self, subset: set[int], k: int, gamma: float) -> list[list[float]]:
         """
-        Returns a 2D list where each row contains augmented features for each node:
-        [degree, degree_into_subset, clustering_coeff, core_number, dist_to_subset, density, k, gamma]
-        
-        Args:
+        Extract the node feature matrix at a certain state in the algortithms.
+
+        args:
             subset: iterable of nodes defining the target set for shortest-path features
             k: parameter for the quasi-clique size
             gamma: parameter for the quasi-clique density
-        """
-        core_numbers = self.compute_core_numbers()
-        distances = self._bfs_multi_source(subset)
         
+        returns:
+            features: the node feature matrix X
+        """
+        distances = self._bfs_multi_source(subset)
         subset_set = set(subset) if not isinstance(subset, set) else subset
         
         features = []
         for u in sorted(self._vertices):
             degree = len(self._adjacency_list[u])
-            clustering = self.clustering_coefficient(u)
+            clustering = self._cluster_coeffs.get(u, 0)
             dist = distances.get(u, self.num_vertices)
-            core_number = core_numbers.get(u, 0)
+            core_number = self._core_numbers.get(u, 0)
             degree_into_subset = self.get_degree_into_subset(u, subset_set)
             
-            # Combine all features
+            # Combine all features into one row
             features.append([
                 degree,
                 degree_into_subset,
@@ -304,79 +371,3 @@ class Graph:
             ])
         
         return features
-
-def generate_synthetic_graph():
-    """
-    Generates a synthetic Graph instance with varying properties.
-    Each call produces graphs with different numbers of nodes and sparseness levels.
-    
-    Returns:
-        Graph: A synthetic graph instance with random structure
-    """
-    num_nodes = random.randint(300, 1000)
-    graph_type = random.choice(['sparse', 'medium', 'scale_free'])
-    
-    if graph_type == 'sparse':
-        edge_prob = random.uniform(0.01, 0.05)
-        edges = _generate_erdos_renyi_edges(num_nodes, edge_prob)
-    
-    elif graph_type == 'medium':
-        edge_prob = random.uniform(0.1, 0.3)
-        edges = _generate_erdos_renyi_edges(num_nodes, edge_prob)
-    
-    else:
-        edges = _generate_scale_free_graph(num_nodes)
-    
-    zero_indexed = random.choice([True, False])
-    
-    # Create and initialize the graph
-    graph = Graph()
-    graph.initialize_synthetic(edges, zero_indexed)
-    
-    return graph
-
-def _generate_erdos_renyi_edges(num_nodes, edge_prob):
-    """Generate edges for an Erdos Renyi random graph."""
-    edges = []
-    for i in range(num_nodes):
-        for j in range(i + 1, num_nodes):
-            if random.random() < edge_prob:
-                edges.append((i, j))
-    return edges
-
-def _generate_scale_free_graph(num_nodes):
-    """Generate a scale-free network using preferential attachment."""
-    if num_nodes < 3:
-        return [(0, 1)] if num_nodes == 2 else []
-    
-    edges = []
-    degrees = defaultdict(int)
-    
-    initial_nodes = min(3, num_nodes)
-    for i in range(initial_nodes):
-        for j in range(i + 1, initial_nodes):
-            edges.append((i, j))
-            degrees[i] += 1
-            degrees[j] += 1
-    
-    for new_node in range(initial_nodes, num_nodes):
-        m = random.randint(1, min(3, new_node))
-    
-        existing_nodes = list(range(new_node))
-        if not existing_nodes:
-            continue
-            
-        total_degree = sum(degrees[node] for node in existing_nodes)
-        if total_degree == 0:
-            targets = random.sample(existing_nodes, min(m, len(existing_nodes)))
-        else:
-            probs = [degrees[node] / total_degree for node in existing_nodes]
-            targets = np.random.choice(existing_nodes, size=min(m, len(existing_nodes)), 
-                                     replace=False, p=probs)
-        
-        for target in targets:
-            edges.append((new_node, target))
-            degrees[new_node] += 1
-            degrees[target] += 1
-    
-    return edges

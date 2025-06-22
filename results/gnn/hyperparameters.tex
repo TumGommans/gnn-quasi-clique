@@ -1,0 +1,20 @@
+\begin{table}[h!]
+    \centering
+    \caption{GNN hyperparameter grid and optimal values.}
+    \label{tab: hyperparameter results}
+    \begin{tabular}{l l l}
+    \toprule
+         parameter & search space & optimal value  \\
+     \midrule
+        \texttt{batch size} & $\{ 32, 64, 128 \}$ & 32 \\
+        \texttt{dropout} & $[0.0, 0.5]$ & 0.4998 \\
+        \texttt{epochs} & $\{ 50, 100, 150 \}$ & 50 \\
+        \texttt{final mlp layers} ($M$) & $\{ 2, 3 \}$ & 2 \\
+        \texttt{hidden dim} ($d$) & $\{ 32, 64, 128 \}$ & 32 \\
+        \texttt{learning rate} & $[10^{-9.21}, 10^{-4.61}]$ & $1.24 \cdot 10^{-3}$ \\
+        \texttt{mlp layers per gin} ($L_k$) & $\{ 2, 3 \}$ & 2 \\
+        \texttt{num gin layers} ($K$) & $\{ 2, 3, 4, 5 \}$ & 5 \\
+        \texttt{readout} & $\{\operatorname{sum}, \operatorname{mean} \}$ & mean \\
+    \bottomrule
+    \end{tabular}
+\end{table}

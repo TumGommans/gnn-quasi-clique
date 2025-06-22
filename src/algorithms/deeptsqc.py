@@ -1,7 +1,8 @@
-"""Script that implements the DeepTSQC algorithm."""
+"""Script implementing the DeepTSQC algorithm."""
 
 import time
 import torch
+import random
 
 from torch_geometric.data import Data
 
@@ -21,7 +22,7 @@ class DeepTSQC(TSQC):
         gamma: float,
         gnn: SearchDepthGNN,
         max_iterations_It: int = 10**8,
-        rng=None,
+        rng: random.Random = None,
         best_known: bool = False,
         time_limit: int = 3600,
     ):
@@ -36,24 +37,33 @@ class DeepTSQC(TSQC):
             best_known: whether the target k given to the solve method is the best known
             time_limit: speaks for itself
         """
-        super().__init__(graph, gamma, max_iterations_It, rng, best_known, time_limit)
+        super().__init__(
+            graph=graph, 
+            gamma=gamma, 
+            max_iterations_It=max_iterations_It,
+            rng=rng, 
+            best_known=best_known, 
+            time_limit=time_limit
+        )
         self._gnn = gnn
 
-    def solve(self, initial_k: int = 1):
+    def solve(self, initial_k: int = 2) -> tuple[set[int], float]:
         """Solves the MQCP using DeepTSQC.
 
-        The key difference with TSQC.solve() is the prediction of L on line 73.
+        The key difference with TSQC.solve() is the prediction of L
         
         args:
             initial_k: the target clique size to begin with
+        
+        returns:
+            best_quasi_clique_found: the best solution found by DeepTSQC
+            elapsed_overall: the runtime until the largest quasi-clique was found
         """
         k = max(1, initial_k)
         current_best_clique = set()
         start_time_overall = time.time()
         iteration_count_It = 0
-        best_runtime_found = 0.0
-
-        k_is_incremented = False
+        elapsed_overall = float('inf')
 
         print(f"Starting DeepTSQC search with gamma = {self._gamma}, initial_k = {k}, "
               f"It_max = {self._It_max}")
@@ -95,58 +105,64 @@ class DeepTSQC(TSQC):
                     rng=self._rng,
                 )
 
-                best_S_star_tsq, it_consumed_tsq = tsq.run()
+                S_star, it_consumed_tsq = tsq.run()
                 iteration_count_It += it_consumed_tsq
 
-                if self._is_legal_quasi_clique(best_S_star_tsq, k, self._gamma):
-                    end_time_k = time.time()
-                    elapsed = end_time_k - start_time_overall
-                    print(f"  DeepTSQ: SUCCESS: Legal {k}-quasi-clique found by TSQ! "
-                          f"(Time to find: {elapsed:.2f}s)")
-                    found_clique_for_k = best_S_star_tsq.copy()
-                    current_best_clique = found_clique_for_k
-                    self.best_quasi_clique_found = current_best_clique
-                    self.best_quasi_clique_size = k
-                    best_runtime_found = elapsed
+                if self._is_legal_quasi_clique(S_star, k, self._gamma):
+                    print(f"  SUCCESS: Legal {k}-quasi-clique found by TSQ!")
+                    found_clique_for_k = S_star
                     break
                 else:
-                    print("  TSQ finished without legal clique. Generating restart...")
+                    print("  TSQ finished without legal clique. Generating restart solution...")
                     current_S = self._generate_restart_solution(k)
                     if not current_S:
-                        print(f"  DeepTSQ: Could not generate restart for k={k}. Stopping search.")
+                        print(f"  Stopping k={k} search: Could not generate restart solution.")
                         found_clique_for_k = None
                         break
                     if time.time() - start_time_k > self._time_limit:
-                        print(f"  Timeout reached for finding k={k}. Stopping search.")
+                        print(f"  Timeout reached for finding k={k}. Stopping search for this k.")
                         found_clique_for_k = None
                         break
                     restart_counter += 1
 
             if found_clique_for_k:
-                if not self._best_known:
-                    k += 1
-                    k_is_incremented = True
-                else:
+                end_time_k = time.time()
+                elapsed = end_time_k - start_time_k
+                print(f"  Time taken for k={k}: {elapsed:.2f} seconds")
+                current_best_clique = found_clique_for_k
+                self.best_quasi_clique_found = current_best_clique
+                self.best_quasi_clique_size = k
+                if self._best_known:
+                    elapsed_overall = elapsed
+                    print(f"The {k}-quasi-clique was the best known for TSQC. Stopping search.")
                     break
+                else:
+                    elapsed_overall = end_time_k - start_time_overall
+                    k += 1
             else:
-                if not k_is_incremented:
-                    termination_time = time.time()
-                    best_runtime_found = termination_time - start_time_overall
+                print(f"Could not find a {k}-quasi-clique within iteration limits. Stopping search.")
                 break
 
         print(f"\n--- DeepTSQC Complete ---")
-        print(f"Max {self._gamma}-quasi-clique size: {self.best_quasi_clique_size}")
-        print(f"Time to best found clique: {best_runtime_found:.2f} seconds")
+        print(f"Maximum {self._gamma}-quasi-clique size found: {self.best_quasi_clique_size}")
+        print(f"Total execution time: {elapsed_overall:.2f} seconds")
         print(f"Global iterations consumed: {iteration_count_It}")
 
-        return self.best_quasi_clique_found, best_runtime_found
+        return self.best_quasi_clique_found, elapsed_overall
 
-    def _predict_L(self, current_S, k):
+    def _predict_L(
+            self, 
+            current_S: set[int], 
+            k: int
+    ) -> int:
         """Predict the optimal search depth for the algorithm.
         
         args:
             current_S: the current initial solution that the alg begins with
             k: the target quasi clique size
+        
+        returns:
+            int: the predicted value for L
         """
         state = self._get_state(current_S, k)
         data = self._create_data_from_state(state)
@@ -155,12 +171,19 @@ class DeepTSQC(TSQC):
             predicted_class = output.argmax(dim=-1).item()
             return INDEX_TO_L[predicted_class]
 
-    def _get_state(self, current_S, k):
+    def _get_state(
+        self, 
+        current_S: set[int], 
+        k: int
+    ) -> dict:
         """Helper method, to get the state prior to predicting L.
         
         args:
             current_S: the current initial solution that the alg begins with
             k: the target quasi clique size
+        
+        returns:
+            dict: state dict needed for running a forward pass on the GNN
         """
         return {
             "graph_structure": {
@@ -173,9 +196,18 @@ class DeepTSQC(TSQC):
         }
 
     @staticmethod
-    def _create_data_from_state(state):
+    def _create_data_from_state(
+        state: dict
+    ) -> Data:
         """Helper method to convert the state dictionary to a Data() object.
-        This allows for a forward pass through the trained GNN."""
+
+        This allows for a forward pass through the trained GNN.
+        
+        args:
+            state: dictionary containing the input data
+            
+        returns:
+            Data: object for running a forward pass on the GNN"""
         x = torch.tensor(state['state']['node_features'], dtype=torch.float)
         edge_index = torch.tensor(state['graph_structure']['edge_index'], dtype=torch.long)
         

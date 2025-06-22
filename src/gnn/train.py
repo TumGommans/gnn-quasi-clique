@@ -4,14 +4,23 @@ import json, torch
 import torch.nn.functional as F
 
 from collections import Counter
+from src.gnn.model import SearchDepthGNN
 
+from torch import Tensor
+from torch.optim import Adam
 from torch.utils.data import Dataset
+
 from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 
 class RestartDataset(Dataset):
-    """Object to make tailored dataset for restarts. Initially built
-    for each restart of TSQ, but now used it for each run of TSQC given (k, gamma)"""
-    def __init__(self, path):
+    """
+    Object to make tailored dataset for restarts. 
+    
+    Initially built for each restart of TSQ, but now used it for each run of TSQC given (k, gamma)
+    """
+
+    def __init__(self, path: str):
         """initializes an object, given the data path."""
         self.path = path
         self.offsets = []
@@ -42,7 +51,13 @@ class RestartDataset(Dataset):
         y = torch.tensor(obj['action']['optimal_L_index'], dtype=torch.long)
         return Data(x=x, edge_index=ei, y=y)
 
-def train_epoch(model, loader, opt, device, class_weights):
+def train_epoch(
+    model: SearchDepthGNN, 
+    loader: DataLoader, 
+    opt: Adam, 
+    device: str, 
+    class_weights: Tensor
+) -> float:
     """Function to train an epoch.
     
     args:
@@ -51,6 +66,9 @@ def train_epoch(model, loader, opt, device, class_weights):
         opt: the optimizer, I used Adam
         device: the device to run computations on (CPU/CUDA)
         class_weights: the class weights, used to mitigate the slight imbalance
+    
+    returns:
+        float: the average loss of this epoch
     """
     model.train()
     total_loss = 0.0
@@ -64,13 +82,20 @@ def train_epoch(model, loader, opt, device, class_weights):
         total_loss += loss.item() * batch.num_graphs
     return total_loss / len(loader.dataset)
 
-def eval_epoch(model, loader, device):
+def eval_epoch(
+    model: SearchDepthGNN, 
+    loader: DataLoader, 
+    device: str
+) -> float:
     """Function to evaluate an epoch.
 
     args:
         model: the GNN architecture from SearchDepthGNN
         loader: the data loader object containing the batches, over which predictions are computed
         device: the device to run computations on (CPU/CUDA)
+    
+    returns:    
+        float: fraction of correct predictions
     """
     model.eval()
     correct = 0

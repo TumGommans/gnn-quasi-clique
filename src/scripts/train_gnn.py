@@ -6,23 +6,47 @@ import yaml
 import torch
 import numpy as np
 
+from typing import Any
+
 from torch import optim
 from torch.utils.data import random_split
-from torch.utils.data import WeightedRandomSampler
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
+from sklearn.metrics import (
+    accuracy_score, 
+    precision_recall_fscore_support, 
+    confusion_matrix
+)
 
 from torch_geometric.loader import DataLoader
+
+from hyperopt import fmin, space_eval, tpe, hp, Trials
 
 from src.gnn.model import SearchDepthGNN
 from src.gnn.train import train_epoch, RestartDataset
 
 os.environ["OMP_NUM_THREADS"] = "10"
 os.environ["MKL_NUM_THREADS"] = "10"
+
 torch.set_num_threads(10)            
 torch.set_num_interop_threads(10)  
 
-def evaluate_model_metrics(model, loader, device, num_classes):
-    """Evaluate model and return comprehensive metrics."""
+def evaluate_model_metrics(
+    model: SearchDepthGNN, 
+    loader: DataLoader, 
+    device: str, 
+    num_classes: int
+) -> dict:
+    """
+    Evaluate model and return comprehensive metrics.
+    
+    args:
+        model: the trained GNN
+        loader: the data loader containing all batches
+        device: the device to run it on
+        num_classes: the number of classes
+    
+    returns:
+        dict: contains the evaluation metrics and confusion matrix
+    """
     model.eval()
     all_preds = []
     all_labels = []
@@ -40,7 +64,7 @@ def evaluate_model_metrics(model, loader, device, num_classes):
     # Calculate metrics
     accuracy = accuracy_score(all_labels, all_preds)
     precision, recall, f1, _ = precision_recall_fscore_support(
-        all_labels, all_preds, average='weighted', zero_division=0
+        all_labels, all_preds, average='macro', zero_division=0
     )
     cm = confusion_matrix(all_labels, all_preds, labels=list(range(num_classes)))
     
@@ -61,20 +85,18 @@ with open('src/config/gnn/train-gnn.yml') as f:
 use_manual = train_cfg.get('use_manual_params', False)
 
 device = torch.device("cpu")
-
 full_ds = RestartDataset(train_cfg['data_path'])
 
 # Create 80/10/10 split
 train_len = int(0.8 * len(full_ds))
 val_len = int(0.1 * len(full_ds))
 test_len = len(full_ds) - train_len - val_len
-
 train_ds, val_ds, test_ds = random_split(full_ds, [train_len, val_len, test_len])
 
 # Create test loader for final evaluation
 test_loader = DataLoader(
     test_ds,
-    batch_size=64,  # Use a reasonable batch size for testing
+    batch_size=64,
     shuffle=False,
     num_workers=0,
     pin_memory=True
@@ -84,17 +106,15 @@ if use_manual:
     print("Manual hyperparameter training enabled.")
     print("Loading optimal hyperparameters from results/gnn/hyperparameters.json...")
     
-    # Load the optimal hyperparameters from the hyperopt results
     with open('results/gnn/hyperparameters.json', 'r') as f:
         cfg = json.load(f)
     
     print(f"Loaded hyperparameters: {cfg}")
     
-    # Combine train and val datasets for training on 90% of data
     train_val_ds = torch.utils.data.ConcatDataset([train_ds, val_ds])
     print(f"Training on {len(train_val_ds)} samples (90% of data)")
     
-    # Build model with optimal hyperparameters
+    # Build model with hyperparameters
     model = SearchDepthGNN(
         node_feat_dim=train_cfg['node_feat_dim'],
         hidden_dim=int(cfg['hidden_dim']),
@@ -107,7 +127,6 @@ if use_manual:
         num_classes=train_cfg['num_classes']
     ).to(device)
 
-    # Create weighted sampler for combined train+val dataset
     train_val_labels = []
     for i in train_ds.indices:
         train_val_labels.append(int(full_ds[i].y))
@@ -115,16 +134,10 @@ if use_manual:
         train_val_labels.append(int(full_ds[i].y))
     
     train_val_weights = [full_ds.class_weights[l].item() for l in train_val_labels]
-    train_val_sampler = WeightedRandomSampler(
-        train_val_weights,
-        num_samples=len(train_val_weights),
-        replacement=True
-    )
-
     train_val_loader = DataLoader(
         train_val_ds,
         batch_size=int(cfg['batch_size']),
-        sampler=train_val_sampler,
+        shuffle=True,
         num_workers=0,      
         pin_memory=True    
     )
@@ -160,13 +173,18 @@ if use_manual:
     print(f"Saved final model weights to {out_path}")
 
 else:
-    # Hyperparameter tuning with Hyperopt
-    from hyperopt import fmin, space_eval, tpe, hp, Trials
+    def objective(params: Any) -> float:
+        """Objective function to optimize hyperparameters over.
+        
+        args:
+            params: single configuration of hyperparamers
 
-    def objective(params):
+        returns:
+            -best_f1: negative F1 (due to minimization)        
+        """
         cfg = params
         model = SearchDepthGNN(
-            node_feat_dim=train_cfg['node_feat_dim'],  # Use from config
+            node_feat_dim=train_cfg['node_feat_dim'],
             hidden_dim=int(cfg['hidden_dim']),
             num_gin_layers=int(cfg['num_gin_layers']),
             mlp_layers_per_gin=int(cfg['mlp_layers_per_gin']),
@@ -174,38 +192,30 @@ else:
             readout=cfg['readout'],
             dropout=cfg['dropout'],
             activation=cfg['activation'],
-            num_classes=train_cfg['num_classes']  # Use from config
+            num_classes=train_cfg['num_classes']
         ).to(device)
 
         optimizer = optim.Adam(model.parameters(), lr=cfg['lr'])
 
-        train_labels  = [ int(full_ds[i].y) for i in train_ds.indices ]
-        train_weights = [ full_ds.class_weights[l].item() for l in train_labels ]
-        train_sampler = WeightedRandomSampler(
-            train_weights,
-            num_samples=len(train_weights),
-            replacement=True
-        )
-
         train_loader = DataLoader(
             train_ds,
             batch_size=int(cfg['batch_size']),
-            sampler=train_sampler
+            shuffle=True
         )
         val_loader = DataLoader(val_ds,
             batch_size=int(cfg['batch_size']),
             shuffle=False
         )
 
-        best_f1 = 0.0  # Track F1 instead of accuracy
+        best_f1 = 0.0
         for _ in range(int(cfg['epochs'])):
             train_epoch(model, train_loader, optimizer, device, full_ds.class_weights)
-            # Evaluate on validation set and get F1 score
             val_metrics = evaluate_model_metrics(model, val_loader, device, train_cfg['num_classes'])
             best_f1 = max(best_f1, val_metrics['f1'])
 
-        return -best_f1  # Minimize negative F1
+        return -best_f1
 
+    # Define the search space
     space = {
         'num_gin_layers': hp.choice('num_gin_layers', train_cfg['hyperopt_space']['num_gin_layers']),
         'hidden_dim': hp.choice('hidden_dim', train_cfg['hyperopt_space']['hidden_dim']),
@@ -218,7 +228,8 @@ else:
         'batch_size': hp.choice('batch_size', train_cfg['hyperopt_space']['batch_size']),
         'epochs': hp.choice('epochs', train_cfg['hyperopt_space']['epochs']),
     }
-
+    
+    # Call the minimization
     trials = Trials()
     best = fmin(
         fn=objective,
@@ -236,8 +247,6 @@ else:
 
     # Retrain on train+val (90%) with best hyperparameters
     print("Retraining on 90% of data (train+val) with best hyperparameters…")
-    
-    # Combine train and val datasets for final training
     train_val_ds = torch.utils.data.ConcatDataset([train_ds, val_ds])
     
     final_cfg = best_params
@@ -254,25 +263,11 @@ else:
     ).to(device)
 
     optim_final = optim.Adam(final_model.parameters(), lr=final_cfg['lr'])
-
-    # Create weighted sampler for combined train+val dataset
-    train_val_labels = []
-    for i in train_ds.indices:
-        train_val_labels.append(int(full_ds[i].y))
-    for i in val_ds.indices:
-        train_val_labels.append(int(full_ds[i].y))
-    
-    train_val_weights = [full_ds.class_weights[l].item() for l in train_val_labels]
-    train_val_sampler = WeightedRandomSampler(
-        train_val_weights,
-        num_samples=len(train_val_weights),
-        replacement=True
-    )
     
     train_val_loader = DataLoader(
         train_val_ds,
         batch_size=int(final_cfg['batch_size']),
-        sampler=train_val_sampler
+        shuffle=True
     )
 
     for epoch in range(int(final_cfg['epochs'])):

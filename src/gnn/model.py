@@ -3,6 +3,9 @@
 import torch.nn.functional as F
 
 from torch import nn
+from torch import Tensor
+
+from torch_geometric.data import Data
 from torch_geometric.nn import GINConv
 from torch_geometric.nn.norm import GraphNorm
 
@@ -68,11 +71,14 @@ class SearchDepthGNN(nn.Module):
                 mlp.append(nn.Dropout(dropout))
         self.final_mlp = nn.Sequential(*mlp)
 
-    def forward(self, data):
-        """Forward pass throug the architecture.
+    def forward(self, data: Data) -> Tensor:
+        """Forward pass through the architecture.
         
         args:
-            data: Data() object containing the batch data required.
+            data: object containing the batch data required for the forward pass
+        
+        returns:
+            Tensor: the probability distribution over the discrete action space
         """
         x, edge_index, batch = data.x, data.edge_index, data.batch
         for i, conv in enumerate(self.gin_layers):

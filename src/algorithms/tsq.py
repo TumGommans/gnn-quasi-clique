@@ -2,7 +2,11 @@
 
 import random
 import math
+
 from collections import defaultdict
+from typing import Union
+
+from src.utils.graph import Graph
 
 class TSQ:
     """
@@ -12,19 +16,17 @@ class TSQ:
     representing the inner loop called by the main TSQC algorithm.
     """
     def __init__(
-            self, 
-            graph, 
-            gamma,
-            k,
-            L, 
-            initial_S, 
-            current_It, 
-            update_freq_method, 
-            max_total_It, 
-            rng=None,
-            use_cum_saturation=False,
-            use_common_neighbors=False
-        ):
+        self, 
+        graph: Graph, 
+        gamma: float,
+        k: int,
+        L: int, 
+        initial_S: set[int], 
+        current_It: int, 
+        update_freq_method: callable, 
+        max_total_It: int, 
+        rng: random.Random = None,
+    ):
         """
         Initializes the TSQ search object.
 
@@ -37,14 +39,7 @@ class TSQ:
             current_It:           The current global iteration count (for max check and tabu).
             update_freq_method:   Method from TSQC to update frequency memory.
             max_total_It:         The overall maximum iteration limit.
-            use_cum_saturation:   Whether to use cumulative saturation tie-breaking.
-            use_common_neighbors: Whether to use common neighbors tie-breaking.
         """
-        # Check that both tie-breaking mechanisms are not enabled simultaneously
-        tie_breaking_methods = sum([use_cum_saturation, use_common_neighbors])
-        if tie_breaking_methods > 1:
-            raise ValueError("Cannot enable multiple tie-breaking mechanisms simultaneously")
-        
         self._graph = graph
         self._gamma = gamma
         self._k = k
@@ -66,21 +61,13 @@ class TSQ:
         self.intensification_count = 0
         self.tie_breaker_count = 0
 
-        # Cumulative saturation
-        self._use_cum_saturation = use_cum_saturation
-        if self._use_cum_saturation:
-            # Maximum degree ∆G
-            self._DeltaG = max(len(graph.get_neighbors(v)) for v in graph.vertices)
-            self._cum_sat = {v: 0 for v in graph.vertices}
-            # track last-change step t0(v) and TS(v)
-            self._last_change = {v: 0 for v in graph.vertices}
-            self._time_in_S = defaultdict(int)
-
-        # Common neighbors tie-breaking
-        self._use_common_neighbors = use_common_neighbors
-
     def run(self):
-        """ Executes the TSQ procedure."""
+        """ Executes the TSQ procedure according to Algorithm 2 of the thesis.
+        
+        returns:
+            self._S_star: the best found solution throughout the search
+            self._iterations_consumed: the number of global iterations consumed by the algorithm    
+        """
         self._S = self._initial_S.copy()
         self._S_star = self._S.copy()
         self._f_S = self._evaluate_solution(self._S)
@@ -102,10 +89,6 @@ class TSQ:
             if current_global_It >= self._max_total_It:
                 print("    TSQ Stop: Global max iterations reached.")
                 break
-
-            # Update cumulative saturation before each iteration
-            if self._use_cum_saturation:
-                self._update_cumulative_saturation(current_global_It)
 
             degrees_in_S = self._calculate_all_degrees_relative_to_S(self._S)
             A, B, MinInS, MaxOutS = self._determine_critical_sets(self._S, degrees_in_S, current_global_It)
@@ -129,10 +112,6 @@ class TSQ:
             if u_selected is not None and v_selected is not None:
                 edge_exists = 1 if self._graph.has_edge(u_selected, v_selected) else 0
                 delta_uv = degrees_in_S.get(v_selected, 0) - degrees_in_S.get(u_selected, 0) - edge_exists
-
-                # Update cumulative saturation tracking before the swap
-                if self._use_cum_saturation:
-                    self._update_vertex_state_change(u_selected, v_selected, current_global_It)
 
                 self._S.remove(u_selected)
                 self._S.add(v_selected)
@@ -166,113 +145,122 @@ class TSQ:
         return self._S_star, self._iterations_consumed
 
 # ------------------------------------------------------------------------------------------------------------
-# Common Neighbors Tie-Breaking Methods
+# Aspiration Criterion Methods
 # ------------------------------------------------------------------------------------------------------------
 
-    def _calculate_common_neighbors_score(self, u, v):
-        """
-        Calculate the common neighbors score s1(u,v) for a swap.
+    def _check_aspiration_criterion(
+        self, 
+        tabu_candidates_in_S: list[int], 
+        tabu_candidates_out_S: list[int], 
+        degrees_in_S: dict, 
+        MinInS: int, 
+        MaxOutS: int
+    ):
+        """Check aspiration criterion for tabu vertices.
         
-        Args:
-            u: Vertex to be removed from S
-            v: Vertex to be added to S
-        """
-        if not self._use_common_neighbors:
-            return 0
-        
-        S_prime = (self._S - {u}) | {v}
-        common_neighbors = set()
-        for w in S_prime:
-            common_neighbors.update(self._graph.get_neighbors(w))
-        
-        common_neighbors -= S_prime
-        
-        return len(common_neighbors)
-
-# ------------------------------------------------------------------------------------------------------------
-# Cumulative Saturation Methods
-# ------------------------------------------------------------------------------------------------------------
-
-    def _calculate_saturation(self, v):
-        """Calculate saturation of vertex v at current step."""
-        if not self._use_cum_saturation:
-            return 0
-        
-        saturation = 0
-        for neighbor in self._graph.get_neighbors(v):
-            if (neighbor in self._S) != (v in self._S):
-                saturation += 1
-        return saturation
-
-    def _update_cumulative_saturation(self):
-        """Update cumulative saturation for all vertices at current step."""
-        if not self._use_cum_saturation:
-            return
-        
-        for v in self._graph.vertices:
-            current_saturation = self._calculate_saturation(v)
-            
-            if v in self._S:
-                self._time_in_S[v] += 1
-            
-            self._cum_sat[v] += current_saturation
-            if v in self._S:
-                self._cum_sat[v] -= self._DeltaG
-
-    def _update_vertex_state_change(self, u_removed, v_added, current_step):
-        """Update tracking when vertices change state.
+        Returns vertices that should be included in critical sets despite being tabu
+        because they could lead to solutions better than the current best.
         
         args:
-            u_removed:    the vertex removed
-            v_added:      the vertex added
-            current_step: the current iteration"""
-        if not self._use_cum_saturation:
-            return
+            tabu_candidates_in_S: tabu vertices currently in S
+            tabu_candidates_out_S: tabu vertices currently not in S  
+            degrees_in_S: dictionary mapping vertices to their degrees in S
+            MinInS: minimum degree of non-tabu vertices in S
+            MaxOutS: maximum degree of non-tabu vertices not in S
         
-        self._last_change[u_removed] = current_step
-        self._last_change[v_added] = current_step
-        self._time_in_S[u_removed] = 0
-        self._time_in_S[v_added] = 0
+        returns:
+            aspiration_A: list of 'aspiring' tabu vertices to be removed
+            aspiration_B: list of 'aspiring' tabu vertices to be added
+        """
+        aspiration_A = set()
+        aspiration_B = set()
+        
+        for u in tabu_candidates_in_S:
+            u_degree = degrees_in_S.get(u, 0)
+            if MinInS == float('inf') or u_degree <= MinInS:
+                aspiration_A.add(u)
+        
+        for v in tabu_candidates_out_S:
+            v_degree = degrees_in_S.get(v, 0)
+            if MaxOutS == -float('inf') or v_degree >= MaxOutS:
+                aspiration_B.add(v)
+        
+        return aspiration_A, aspiration_B
 
-    def _get_cumulative_saturation_score(self, v):
-        """Get the cumulative saturation score for vertex v."""
-        if not self._use_cum_saturation:
-            return 0
-        return self._cum_sat[v]
+    def _evaluate_aspiration_swap(
+        self, 
+        u: int, 
+        v: int, 
+        degrees_in_S: dict
+    ) -> bool:
+        """
+        Evaluate if a tabu swap should be aspirated based on potential improvement.
+        
+        args:
+            u: vertex to remove from S
+            v: vertex to add to S  
+            degrees_in_S: dictionary mapping vertices to their degrees in S
+        
+        returns:
+            bool: whether tabu move improves best solution found
+        """
+        # Calculate the potential change in objective function
+        edge_exists = 1 if self._graph.has_edge(u, v) else 0
+        delta_uv = degrees_in_S.get(v, 0) - degrees_in_S.get(u, 0) - edge_exists
+        
+        # Aspiration criterion: accept tabu move if it improves best solution found
+        potential_f = self._f_S + delta_uv
+        return potential_f > self._f_star
 
 # ------------------------------------------------------------------------------------------------------------
 # Intensification & Diversification Helpers
 # ------------------------------------------------------------------------------------------------------------
 
-    def _intensification_select_swap(self, A, B, MinInS, MaxOutS, best_swaps_T):
-        """ Selects swap pair (u, v) during intensification (Delta_uv >= 0).
+    def _intensification_select_swap(
+        self, 
+        A: int, 
+        B: int, 
+        MinInS: int, 
+        MaxOutS: int, 
+        best_swaps_T: list[tuple[int]],
+    ) -> Union[tuple[int], tuple[None]]:
+        """
+        Selects swap pair (u, v) during intensification (Delta_uv >= 0).
         
         args:
             A:       the critical set containing vertices to remove
             B:       the critical set containing vertices to add
             MinInS:  the minimum degree present in S
             MaxOutS: the maximum degree present from a vertex out of S into S
+            best_swaps_T: list of swaps for which the swapped vertices aren't adjacent
+        
+        returns:
+            u_selected: the vertex to remove in case improvement possible
+            v_selected: the vertex to add in case improvement possible
         """
         u_selected, v_selected = None, None
 
         if MaxOutS - MinInS >= 0 and best_swaps_T:
-             u_selected, v_selected = self._select_swap_tie_breaking(best_swaps_T)
-             return u_selected, v_selected
+            u_selected, v_selected = self._select_swap_tie_breaking(best_swaps_T)
+            return u_selected, v_selected
         
         if MaxOutS - MinInS - 1 >= 0:
             edge_pairs = [(u, v) for u in A for v in B if self._graph.has_edge(u, v)]
             if edge_pairs:
-                 u_selected, v_selected = self._select_swap_tie_breaking(edge_pairs)
-                 return u_selected, v_selected
+                u_selected, v_selected = self._select_swap_tie_breaking(edge_pairs)
+                return u_selected, v_selected
 
         return None, None
 
-    def _select_swap_tie_breaking(self, swap_candidates):
-        """Selects a swap from candidates using tie-breaking mechanisms.
+    def _select_swap_tie_breaking(self, swap_candidates: list[tuple[int]]) -> tuple[int]:
+        """
+        Selects a swap from candidates using tie-breaking mechanisms and aspiration.
         
         args:
-            swap_candidates: set of swaps yielding equal scores on the primary
-                             scoring function
+            swap_candidates: set of swaps yielding equal scores on the scoring function
+        
+        returns
+            tuple[int]: the swap (u, v) to be applied
         """
         if not swap_candidates: 
             return None, None
@@ -281,49 +269,44 @@ class TSQ:
         if len(swap_candidates) > 1:
             self.tie_breaker_count += 1
 
-        # Common neighbors tie-breaking
-        if self._use_common_neighbors and len(swap_candidates) > 1:
-            best_score = float('-inf')
-            best_swaps = []
-            
-            for u, v in swap_candidates:
-                score = self._calculate_common_neighbors_score(u, v)
-                
-                if score > best_score:
-                    best_score = score
-                    best_swaps = [(u, v)]
-                elif score == best_score:
-                    best_swaps.append((u, v))
-            
-            # If we still have ties after common neighbors, break randomly
-            return self._rng.choice(best_swaps) if self._rng else random.choice(best_swaps)
-
-        # Cumulative saturation tie-breaking
-        if self._use_cum_saturation and len(swap_candidates) > 1:
-            best_score = float('-inf')
-            best_swaps = []
-            
-            for u, v in swap_candidates:
-                gamma_v = self._get_cumulative_saturation_score(v)
-                gamma_u = self._get_cumulative_saturation_score(u)
-                score = gamma_v - gamma_u
-                
-                if score > best_score:
-                    best_score = score
-                    best_swaps = [(u, v)]
-                elif score == best_score:
-                    best_swaps.append((u, v))
-            
-            return self._rng.choice(best_swaps) if self._rng else random.choice(best_swaps)
+        # First, check if any candidates satisfy aspiration criterion
+        aspirated_swaps = []
+        non_aspirated_swaps = []
         
-    def _diversification_select_swap(self, A, B, best_swaps_T, degrees_in_S):
-        """ Selects swap pair (u, v) during diversification.
+        degrees_in_S = self._calculate_all_degrees_relative_to_S(self._S)
+        
+        for u, v in swap_candidates:
+            if self._evaluate_aspiration_swap(u, v, degrees_in_S):
+                aspirated_swaps.append((u, v))
+            else:
+                non_aspirated_swaps.append((u, v))
+        
+        # Prefer aspirated swaps if available
+        final_candidates = aspirated_swaps if aspirated_swaps else non_aspirated_swaps
+        
+        if not final_candidates:
+            return None, None
+        
+        return self._rng.choice(final_candidates) if self._rng else random.choice(final_candidates)
+        
+    def _diversification_select_swap(
+        self, 
+        A: int, 
+        B: int, 
+        best_swaps_T: list[tuple[int]],
+        degrees_in_S: dict
+    ) -> tuple[int]:
+        """
+        Selects swap pair (u, v) during diversification.
         
         args:
             A: the critical set containing vertices to remove
             B: the critical set containing vertices to add
             best_swaps_T: set of swaps yielding the best scores
             degrees_in_S: dictionary mapping vertices to their degrees in S
+        
+        returns:
+            tuple[int]: the swap (u, v) to be applied
         """
         u_selected, v_selected = None, None
 
@@ -361,12 +344,20 @@ class TSQ:
 # Tabu list management
 # ------------------------------------------------------------------------------------------------------------
     
-    def _calculate_tabu_tenures(self, k, f_S):
+    def _calculate_tabu_tenures(
+        self, 
+        k: int, 
+        f_S: int
+    ) -> tuple[int]:
         """ Calculates adaptive tabu tenures Tu and Tv.
         
         args:
             k: the target clique size
             f_S: the evaluation function value at the current step
+        
+        returns:
+            Tu: number of iterations u can't be re-added
+            Tv: number of iterations v can't be re-removed
         """
         target_edges = self._calculate_target_edges(k, self._gamma)
 
@@ -381,43 +372,82 @@ class TSQ:
             Tv = math.ceil(0.6 * l_val) + random.randint(0, max(0, math.floor(0.6 * C_val) - 1))
         return Tu, Tv
 
-    def _determine_critical_sets(self, S, degrees_in_S, current_iteration):
-        """ Finds the critical sets A and B based on non-tabu vertices.
+    def _determine_critical_sets(
+        self, 
+        S: set[int], 
+        degrees_in_S: dict, 
+        current_iteration: int
+    ) -> tuple[tuple[set[int]], tuple[int]]:
+        """ Finds the critical sets A and B based on non-tabu vertices and aspiration criterion.
         
         args:
             S: the current solution
             degrees_in_S: dictionary mapping vertices to their degrees in S
             current_iteration: the current iteration
+        
+        returns:
+            A: the set of vertices to be removed
+            B: the set of vertices to be added
+            MinInS: minimum degree wrt S for non-tabu vertices in S
+            MinInS: maximum degree wrt S for non-tabu vertices outside S
         """
         MinInS = float('inf')
         non_tabu_in_S = []
+        aspiration_candidates_in_S = []  # Tabu vertices that could be aspirated
+        
         for u in S:
-             if current_iteration >= self._tabu_until_u.get(u, 0):
+            if current_iteration >= self._tabu_until_u.get(u, 0):
                 non_tabu_in_S.append(u)
                 MinInS = min(MinInS, degrees_in_S.get(u, 0))
+            else:
+                # Check if this tabu vertex could be part of aspiration
+                aspiration_candidates_in_S.append(u)
 
         MaxOutS = -float('inf')
         non_tabu_out_S = []
+        aspiration_candidates_out_S = []  # Tabu vertices that could be aspirated
         V_minus_S = self._graph.vertices - S
+        
         for v in V_minus_S:
             if current_iteration >= self._tabu_until_v.get(v, 0):
                 non_tabu_out_S.append(v)
                 MaxOutS = max(MaxOutS, degrees_in_S.get(v, 0))
+            else:
+                # Check if this tabu vertex could be part of aspiration
+                aspiration_candidates_out_S.append(v)
 
+        # Create base critical sets from non-tabu vertices
         A = {u for u in non_tabu_in_S if degrees_in_S.get(u, 0) == MinInS} if MinInS != float('inf') else set()
         B = {v for v in non_tabu_out_S if degrees_in_S.get(v, 0) == MaxOutS} if MaxOutS != -float('inf') else set()
+
+        # Check aspiration criterion for tabu vertices
+        aspiration_A, aspiration_B = self._check_aspiration_criterion(
+            aspiration_candidates_in_S, aspiration_candidates_out_S, 
+            degrees_in_S, MinInS, MaxOutS)
+        
+        # Add aspirated vertices to critical sets
+        A.update(aspiration_A)
+        B.update(aspiration_B)
 
         if MaxOutS == -float('inf'): MaxOutS = 0
         if MinInS == float('inf'): MinInS = 0
 
         return A, B, MinInS, MaxOutS
 
-    def _find_best_swaps(self, A, B):
-        """Finds the set T of best swaps (gain = MaxOutS - MinInS, {u,v} not edge).
+    def _find_best_swaps(
+        self, 
+        A: set[int], 
+        B: set[int]
+    ) -> list[tuple[int]]:
+        """
+        Finds the set T of best swaps (gain = MaxOutS - MinInS, {u,v} not edge).
         
         args:
             A: the critical set containing vertices to remove
             B: the critical set containing vertices to add
+        
+        returns:
+            T: list of best swaps
         """
         T = set()
         if A and B:
@@ -431,41 +461,57 @@ class TSQ:
 # Helper functions
 # ------------------------------------------------------------------------------------------------------------
 
-    def _evaluate_solution(self, subset):
-        """Calculates f(S) = number of edges in induced subgraph.
+    def _evaluate_solution(self, subset: set) -> int:
+        """
+        Calculates f(S) = number of edges in induced subgraph.
         
         args:
             subset: the set of vertices to compute f(S) over
+        
+        returns:
+            int: the value of f(subset) according to the thesis paper.
         """
         if not subset or len(subset) < 2: return 0
         return self._graph.get_induced_subgraph_edges(subset)
 
-    def _calculate_target_edges(self, k, gamma):
-        """Calculates the minimum number of edges for a legal k-gamma-quasi-clique.
+    def _calculate_target_edges(self, k: int, gamma: float) -> int:
+        """
+        Calculates the minimum number of edges for a legal k-gamma-quasi-clique.
         
         args:
             k: the target quasi clique size
             gamma: the density threshold
+        
+        returns:
+            int: the number of edges required in the solution
         """
         if k < 2: return 0
         return math.ceil(gamma * k * (k - 1) / 2.0)
 
-    def _is_legal_quasi_clique(self, subset, k, gamma):
-        """Checks if a subset is a legal k-gamma-quasi-clique using current f_S.
+    def _is_legal_quasi_clique(self, subset: set, k: int, gamma: float):
+        """
+        Checks if a subset is a legal k-gamma-quasi-clique using current f_S.
         
         args:
             subset: the current solution to check
             k: the target quasi clique size
             gamma: the density threshold
+        
+        returns:
+            bool: whether the subset is a feasible quasi clique
         """
         if not subset or len(subset) != k: return False
         return self._f_S >= self._calculate_target_edges(k, gamma)
 
-    def _calculate_all_degrees_relative_to_S(self, S):
-        """Calculates d(v) = |{u in S | {u, v} in E}| for all vertices v in V.
+    def _calculate_all_degrees_relative_to_S(self, S: set) -> dict:
+        """
+        Calculates d(v) = |{u in S | {u, v} in E}| for all vertices v in V.
         
         args:
             S: the subset to which degrees are computed
+        
+        returns:
+            degrees: dictionary of the form {v: d_S(v)}
         """
         degrees = defaultdict(int)
         if not S:

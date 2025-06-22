@@ -9,14 +9,7 @@
             [2, 0.5, 4, 0], 
             [3, 0.66, 1, 1], 
             [2, 0.5, 3, 0]
-        ], 
-        "graph_features": {
-            "gamma": 0.8, 
-            "initial_target_k": 5,
-            "current_target_k": 6, 
-            "graph_density": 0.583,
-            "restart_count": 1
-        }
+        ]
     },
     "action": {
         "optimal_L_index": 0, 

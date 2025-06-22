@@ -4,7 +4,6 @@ import random
 import math
 import time
 import copy
-import heapq
 
 from collections import defaultdict
 
@@ -21,13 +20,13 @@ class TSQC:
     """
     def __init__(
         self, 
-        graph, 
-        gamma, 
-        max_iterations_It=10**6, 
-        search_depth_L=1000, 
-        rng=None,
-        best_known=False, 
-        time_limit=600
+        graph: Graph, 
+        gamma: float, 
+        max_iterations_It: int = 10**6, 
+        search_depth_L: int = 1000, 
+        rng: random.Random = None,
+        best_known: bool = False, 
+        time_limit: int = 600
     ):
         """
         Initializes the TSQC process.
@@ -66,21 +65,23 @@ class TSQC:
 
     def solve(
         self, 
-        initial_k=1, 
-        use_cum_saturation=False, 
-        use_common_neighbors=False
-    ):
-        """Approximates the maximum gamma-quasi-clique by finding k-gamma-quasi-cliques
+        initial_k: int = 2
+    ) -> tuple[set[int], float] :
+        """
+        Approximates the maximum gamma-quasi-clique by finding k-gamma-quasi-cliques
         for increasing values of k.
 
         Args:
             initial_k: The starting size k to search for.
-            use_cum_saturation: boolean whether to use cumulative saturation from chen et al. (2021)
-            use_common_neighbors: boolean whether to use common neighbor scores as tie breakers.
+        
+        returns:
+            best_quasi_clique_found: the best solution found by DeepTSQC
+            elapsed_overall: the runtime until the largest quasi-clique was found
         """
         self._initial_k = initial_k
         k = max(1, initial_k)
         current_best_clique = set()
+        elapsed_overall = float('inf')
         start_time_overall = time.time()
         iteration_count_It = 0
 
@@ -125,8 +126,6 @@ class TSQC:
                     update_freq_method=self._update_frequency_memory,
                     max_total_It=self._It_max,
                     rng=self._rng,
-                    use_cum_saturation=use_cum_saturation,
-                    use_common_neighbors=use_common_neighbors,
                 )
                 S_star, it_consumed_tsq = tsq.run()
                 iteration_count_It += it_consumed_tsq
@@ -152,38 +151,42 @@ class TSQC:
                     
             if found_clique_for_k:
                 end_time_k = time.time()
-                print(f"  Time taken for k={k}: {end_time_k - start_time_k:.2f} seconds")
+                elapsed = end_time_k - start_time_k
+                print(f"  Time taken for k={k}: {elapsed:.2f} seconds")
                 current_best_clique = found_clique_for_k
                 self.best_quasi_clique_found = current_best_clique
                 self.best_quasi_clique_size = k
                 if self._best_known:
+                    elapsed_overall = elapsed
                     print(f"The {k}-quasi-clique was the best known for TSQC. Stopping search.")
                     break
                 else:
+                    elapsed_overall = end_time_k - start_time_overall
                     k += 1
             else:
                 print(f"Could not find a {k}-quasi-clique within iteration limits. Stopping search.")
                 break
-    
-        end_time_overall = time.time()
-        runtime = end_time_overall - start_time_overall
+
         print(f"\n--- TSQC Search Complete ---")
         print(f"Maximum {self._gamma}-quasi-clique size found: {self.best_quasi_clique_size}")
-        print(f"Total execution time: {runtime:.2f} seconds")
+        print(f"Total execution time: {elapsed:.2f} seconds")
         print(f"Total global iterations consumed: {iteration_count_It}")
 
-        return self.best_quasi_clique_found, runtime
+        return self.best_quasi_clique_found, elapsed_overall
 
 
 # ------------------------------------------------------------------------------------------------------------
 # Solution Generation & Frequency Memory
 # ------------------------------------------------------------------------------------------------------------
 
-    def _generate_initial_solution(self, k):
+    def _generate_initial_solution(self, k: int) -> set[int]:
         """Generates initial solution S.
         
         args:
             k: the target quasi clique size
+        
+        returns:
+            S: the set of vertices in the initial random solution
         """
         if k > self._num_all_vertices or k <= 0: return None
         available_vertices = list(self._graph.vertices)
@@ -212,49 +215,91 @@ class TSQC:
             S.add(chosen_vertex)
             available_vertices.remove(chosen_vertex)
 
-        return S if len(S) == k else None
+        return S
 
-    def _generate_restart_solution(self, k):
-        """Generates restart solution. Designed for potential override.
+    def _generate_restart_solution(self, k: int) -> set[int]:
+        """
+        Generates restart solution. Designed for potential override.
         
         args:
             k: the target quasi clique size
+        
+        returns:
+            set[int]: the restart solution
         """
         return self._default_restart_strategy(k)
 
-    def _default_restart_strategy(self, k):
-        """Default restart strategy using g_freq from Djeddi et al. (2019).
+    def _default_restart_strategy(self, k: int) -> set[int]:
+        """
+        Default restart strategy using g_freq from Djeddi et al. (2019).
+        
+        According to Section 3.5 of the paper:
+        1. First select the vertex with the lowest g_v 
+        2. Then, iteratively select the next vertex that maximizes the degree 
+        wrt the partial restart solution, breaking ties with g_v and secondly at random
         
         args:
             k: the target quasi clique size
+        
+        returns:
+            S: the restart solution
         """
-        if k > self._num_all_vertices or k <= 0: return None
+        if k > self._num_all_vertices or k <= 0: 
+            return None
+        
         available_vertices = list(self._graph.vertices)
-        if not available_vertices: return None
+        if not available_vertices: 
+            return None
 
-        all_degrees = {v: len(self._graph.get_neighbors(v)) for v in available_vertices}
-        sorted_vertices = sorted(available_vertices, key=lambda v: (self._g_freq.get(v, 0), -all_degrees.get(v, 0)))
-        S = set(sorted_vertices[:k])
-
-        idx = k
-        while len(S) < k and idx < len(sorted_vertices):
-             S.add(sorted_vertices[idx])
-             idx += 1
-
+        S = set()
+        
+        min_freq = min(self._g_freq.get(v, 0) for v in available_vertices)
+        candidates_min_freq = [v for v in available_vertices if self._g_freq.get(v, 0) == min_freq]
+        first_vertex = self._rng.choice(candidates_min_freq) if self._rng else random.choice(candidates_min_freq)
+        S.add(first_vertex)
+        
+        while len(S) < k:
+            remaining_vertices = [v for v in available_vertices if v not in S]
+            if not remaining_vertices:
+                break
+                
+            max_degree_to_S = -1
+            best_candidates = []
+            
+            for v in remaining_vertices:
+                degree_to_S = sum(1 for u in S if self._graph.has_edge(v, u))
+                if degree_to_S > max_degree_to_S:
+                    max_degree_to_S = degree_to_S
+                    best_candidates = [v]
+                elif degree_to_S == max_degree_to_S:
+                    best_candidates.append(v)
+            
+            if len(best_candidates) == 1:
+                chosen_vertex = best_candidates[0]
+            else:
+                min_freq_among_best = min(self._g_freq.get(v, 0) for v in best_candidates)
+                final_candidates = [v for v in best_candidates if self._g_freq.get(v, 0) == min_freq_among_best]
+        
+                chosen_vertex = self._rng.choice(final_candidates) if self._rng else random.choice(final_candidates)
+            
+            S.add(chosen_vertex)
+        
         if len(S) != k:
-             print(f"Warning: Restart strategy generated {len(S)} vertices, expected {k}.")
-             remaining = [v for v in available_vertices if v not in S]
-             while len(S) < k and remaining:
-                 S.add(remaining.pop(self._rng.randrange(len(remaining)) if self._rng else random.randrange(len(remaining))))
+            print(f"Warning: Restart strategy generated {len(S)} vertices, expected {k}.")
+            remaining = [v for v in available_vertices if v not in S]
+            while len(S) < k and remaining:
+                S.add(remaining.pop(self._rng.randrange(len(remaining)) if self._rng else random.randrange(len(remaining))))
 
-        return S if len(S) == k else None
+        return S
 
     def _update_frequency_memory(self, u_out, v_in, k):
-        """Updates the long-term frequency memory g_freq and handles reset.
+        """
+        Updates the long-term frequency memory g_freq and handles reset.
         
-        u_out: the vertex removed in the swap
-        v_in: the vertex added in the swap
-        k: the target quasi clique size
+        args:
+            u_out: the vertex removed in the swap
+            v_in: the vertex added in the swap
+            k: the target quasi clique size
         """
         self._g_freq[u_out] = self._g_freq.get(u_out, 0) + 1
         self._g_freq[v_in] = self._g_freq.get(v_in, 0) + 1
@@ -266,13 +311,22 @@ class TSQC:
 # Helper Functions
 # ------------------------------------------------------------------------------------------------------------
 
-    def _is_legal_quasi_clique(self, subset, k, gamma):
-        """Checks legality of given solution based on edge count.
+    def _is_legal_quasi_clique(
+        self, 
+        subset: set[int], 
+        k: int, 
+        gamma: float
+    ) -> bool:
+        """
+        Checks feasibility of given solution based on edge count.
         
         args:
             subset: the current solution to check
             k: the target quasi clique size
             gamma: the density threshold
+        
+        returns:
+            bool: whether the current solution is feasible
         """
         if not subset or len(subset) != k:
             return False

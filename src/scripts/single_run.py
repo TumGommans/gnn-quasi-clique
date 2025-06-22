@@ -1,4 +1,6 @@
-"""main script to run the algorithm."""
+"""
+Script for single algorithm runs. Mainly used for testing and debugging purposes.
+"""
 
 import yaml
 import os
@@ -13,8 +15,13 @@ from src.algorithms.tsqc import TSQC
 
 CONFIG_FILE_PATH = "src/config/run/single-run.yml"
 
-def load_config(config_path):
-    """Loads configuration from a YAML file."""
+def load_config(config_path: str):
+    """
+    Loads configuration from a YAML file.
+    
+    args: 
+        config_path: location of the configuration file
+    """
     if not os.path.exists(config_path):
         print(f"Error: Configuration file not found at '{config_path}'")
         sys.exit(1)
@@ -30,8 +37,16 @@ def load_config(config_path):
         print(f"An unexpected error occurred while loading config: {e}")
         sys.exit(1)
 
-def validate_config(config):
-    """Basic validation for required config keys."""
+def validate_config(config: dict) -> bool:
+    """
+    Basic validation for required config keys.
+    
+    args:
+        config: dictionary containing the configuration
+    
+    returns:
+        bool: whether the config is valid
+    """
     required_keys = ['graph_filepath', 'gamma', 'initial_k', 'search_depth_L', 'max_iterations_It']
     missing_keys = [key for key in required_keys if key not in config or config[key] is None]
 
@@ -50,9 +65,15 @@ def validate_config(config):
 # ------------------------------------------------------------------------------------------------------------
 # Visualization Function
 # ------------------------------------------------------------------------------------------------------------
-def visualize_quasi_clique(original_graph_obj, quasi_clique_nodes, gamma_val, graph_filepath):
+def visualize_quasi_clique(
+    original_graph_obj: Graph, 
+    quasi_clique_nodes: set[int], 
+    gamma_val: float, 
+    graph_filepath: str
+):
     """
-    Visualizes the original graph and highlights a quasi-clique.
+    Visualizes the original graph and highlights a quasi-clique. Used for 
+    the image on the title page.
 
     Args:
         original_graph_obj: Your custom Graph object.
@@ -153,6 +174,7 @@ def visualize_quasi_clique(original_graph_obj, quasi_clique_nodes, gamma_val, gr
 # ------------------------------------------------------------------------------------------------------------
 
 def main():
+    """Main execution of the algorithm."""
     config = load_config(CONFIG_FILE_PATH)
     validate_config(config)
 
@@ -203,6 +225,7 @@ def main():
             found_clique_size = tsqc_algo.best_quasi_clique_size
 
         print(f"Largest {gamma_val}-quasi-clique found has size: {found_clique_size}")
+        # Uncomment for visualization, takes quite some time.
         # visualize_quasi_clique(custom_graph_obj, best_clique_nodes, gamma_val, filepath)
     else:
         print(f"No satisfying {gamma_val}-quasi-clique found by the TSQC algorithm within the given parameters.")

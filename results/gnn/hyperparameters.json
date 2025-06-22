@@ -1,12 +1,12 @@
 {
     "activation": "ReLU",
     "batch_size": 32,
-    "dropout": 0.005074502638937037,
-    "epochs": 100,
+    "dropout": 0.4997993088998576,
+    "epochs": 50,
     "final_mlp_layers": 2,
-    "hidden_dim": 64,
-    "lr": 0.00016763969114029463,
-    "mlp_layers_per_gin": 3,
-    "num_gin_layers": 3,
-    "readout": "sum"
+    "hidden_dim": 32,
+    "lr": 0.0012391085965354014,
+    "mlp_layers_per_gin": 2,
+    "num_gin_layers": 5,
+    "readout": "mean"
 }

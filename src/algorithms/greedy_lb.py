@@ -1,4 +1,10 @@
-"""Greedy algorithm for a lower bound."""
+"""
+Greedy algorithm for a lower bound.
+
+This algorithm is used in the collection of training data. This is to reduce the 
+class imbalance towards L=500, as running TSQC for k << lower bound always yields
+L=500 as the best value whereas these observations aren't very informative.
+"""
 
 import heapq
 from src.utils.graph import Graph
@@ -17,11 +23,14 @@ class GreedyLB:
         self.graph = graph
         self.gamma = gamma
 
-    def run(self):
+    def run(self) -> int:
         """Runs the greedy heuristic.
         
         Implements a peeling strategy, by removing low-degree
         vertices until the density threshold is satisfied.
+
+        returns:
+            best_size: lower bound on the max quasi-clique problem for this graphß
         """
         nbrs = {v: set(self.graph.get_neighbors(v)) for v in self.graph.vertices}
         deg = {v: len(nbrs[v]) for v in nbrs}

@@ -1,4 +1,4 @@
-# Config file containing GNN hyperparameters.
+# Config file containing GNN hyperparameters for static test runs.
 
 node_feat_dim: 5
 

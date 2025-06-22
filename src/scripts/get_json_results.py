@@ -1,4 +1,13 @@
-"""main script to run the algorithm."""
+"""
+main script to run the algorithms.
+
+Runs both TSQC and DeepTSQC, for 2 classes of graphs:
+
+1) DIMACS, for gamma in {0.85, 0.95, 1.0}
+2) real-life for gamma in {0.5, 0.6, 0.7, 0.8, 0.9}
+
+Each instance-method-gamma combination is run 10 times to address randomness
+"""
 
 import yaml
 import os
@@ -9,11 +18,9 @@ import torch
 
 from src.utils.graph import Graph
 from src.algorithms.tsqc import TSQC
-from src.algorithms.tsqc_gnn import DeepTSQC
+from src.algorithms.deeptsqc import DeepTSQC
 
 from src.gnn.model import SearchDepthGNN
-
-INDEX_TO_L = {0: 500, 1: 1000, 2: 5000}
 
 CONFIG_PATH_DIMACS = "src/config/run/dimacs.yml"
 CONFIG_PATH_REAL_LIFE = "src/config/run/real-life.yml"
@@ -21,8 +28,11 @@ CONFIG_PATH_REAL_LIFE = "src/config/run/real-life.yml"
 HYPERPARAMETER_PATH = "results/gnn/hyperparameters.json"
 WEIGHTS_PATH = "results/gnn/gnn_weights.pth"
 
-def load_config(config_path):
-    """Loads configuration from a YAML file."""
+def load_config(config_path: str):
+    """Loads configuration from a YAML file.
+    
+    args:
+        config_path: location of the configuration file"""
     if not os.path.exists(config_path):
         print(f"Error: Configuration file not found at '{config_path}'")
         sys.exit(1)
@@ -38,9 +48,25 @@ def load_config(config_path):
         print(f"An unexpected error occurred while loading config: {e}")
         sys.exit(1)
 
-def validate_config(config):
-    """Basic validation for required config keys."""
-    required_keys = ['methods', 'filepath', 'search_depth_L', 'max_iterations_It', 'time_limit', 'master_seed', 'gamma', 'k']
+def validate_config(config: dict) -> bool:
+    """Basic validation for required config keys.
+    
+    args:
+        config: the configuration dictionary
+    
+    returns:
+        bool: whether configuration is valid
+    """
+    required_keys = [
+        'methods', 
+        'filepath', 
+        'search_depth_L', 
+        'max_iterations_It', 
+        'time_limit', 
+        'master_seed',
+        'gamma', 
+        'k'
+    ]
     missing_keys = [key for key in required_keys if key not in config or config[key] is None]
 
     if missing_keys:
@@ -60,7 +86,15 @@ def validate_config(config):
 # Algorithm Execution
 # ------------------------------------------------------------------------------------------------------------
 
-def get_results(path):
+def get_results(path: str):
+    """
+    Get the results for a class of graphs, indicated by the input path.
+
+    Writes all the results from a dictionary to JSON at the specified output path.
+    
+    args:
+        path: location of the instance graphs
+    """
     config = load_config(path)
     validate_config(config)
 
@@ -77,7 +111,6 @@ def get_results(path):
     seeds = [random.randint(0, 2**31 - 1) for _ in range(10)]
 
     gamma_values = config['gamma']
-    k_values = config['k']
 
     name = os.path.basename(os.path.normpath(data_path))
     results_path = os.path.join("results", name)
@@ -130,12 +163,12 @@ def get_results(path):
                             max_iterations_It=max_iterations_val,
                             search_depth_L=search_depth_val,
                             rng=random.Random(seeds[i]),
-                            best_known=True,
+                            best_known=False,
                             time_limit=time_limit
                         )
                         print("Starting TSQC process...")
                         best_clique_nodes, time = tsqc.solve(
-                            initial_k=k_values[gamma_val][instance_name],
+                            initial_k=2,
                         )
                     else:
                         tsqc = DeepTSQC(
@@ -144,11 +177,11 @@ def get_results(path):
                             gnn=gnn,
                             max_iterations_It=max_iterations_val,
                             rng=random.Random(seeds[i]),
-                            best_known=True,
+                            best_known=False,
                             time_limit=time_limit
                         )                   
                         print("Starting TSQC process...")
-                        best_clique_nodes, time = tsqc.solve(initial_k=k_values[gamma_val][instance_name])
+                        best_clique_nodes, time = tsqc.solve(initial_k=2)
 
                     print("\n--- Final Result ---")
                     if best_clique_nodes and len(best_clique_nodes) > 0 :
@@ -159,7 +192,8 @@ def get_results(path):
                         print(f"Largest {gamma_val}-quasi-clique found has size: {found_clique_size}")
 
                         results[instance_name][gamma_val][method]["objectives"].append(found_clique_size)
-                        results[instance_name][gamma_val][method]["runtimes"].append(time)
+                        results[instance_name][gamma_val][method]["runtimes"].append(min(time, 600))
+
                         if tsqc.intensification_count == 0:
                             results[instance_name][gamma_val][method]["tie_breaking_proportion"] = 0
                         else:
@@ -167,12 +201,19 @@ def get_results(path):
                             tsqc.tie_breaker_count / tsqc.intensification_count
                     else:
                         results[instance_name][gamma_val][method]["objectives"].append(0)
-                        results[instance_name][gamma_val][method]["runtimes"].append(time)
+                        results[instance_name][gamma_val][method]["runtimes"].append(min(time, 600))
                         print(f"No satisfying {gamma_val}-quasi-clique found by the TSQC algorithm within the given parameters.")
+
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 
-def get_gnn_from_config():
+def get_gnn_from_config() -> SearchDepthGNN:
+    """
+    Instatiates the trained GNN for running DeepTSQC
+
+    returns:
+        model: the trained GNN with optimized hyperparameters
+    """    
     hyperparams = load_config(HYPERPARAMETER_PATH)
 
     # Initialize model with best hyperparameters
@@ -185,7 +226,7 @@ def get_gnn_from_config():
         readout=hyperparams['readout'],
         dropout=hyperparams['dropout'],
         activation=hyperparams['activation'],
-        num_classes=3
+        num_classes=2
     )
 
     # Load trained weights
