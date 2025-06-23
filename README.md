@@ -64,3 +64,25 @@ I provide a Docker-based dev container under `.devcontainer/`. To get started:
    This installs all dependencies listed in `requirements.txt` into the container.
 
 ---
+
+For reference, the repo is structured as follows:
+```
+├── data/
+│   ├── dimacs/                  -> all the DIMACS graphs
+│   ├── real-life/               -> all the real-life graphs
+│   └── training    
+│       ├── biological/          -> all the biological graphs used for collecting trainin data
+│       └── ecological/          -> all the ecological graphs used for collecting trainin data
+├── results/
+│   ├── dimacs/                  -> results for the DIMACS graphs
+│   ├── gnn/                     -> trained GNN weights and optimized hyperparameters
+│   └── real-life/               -> results for the real-life graphs
+└── src/
+    ├── algorithms/              -> the source code for the algorithms
+    ├── config/
+    │   ├── gnn/                 -> config files regarding GNN scripts
+    │   └── run/                 -> config files for the algorithm executions
+    ├── gnn/
+    ├── notebooks/               -> analysis of class distribution
+    ├── scripts/                 -> execution scripts for gathering data, model training, algorithm execution and table generation
+    └── utils/                   -> utilities: custom objects
