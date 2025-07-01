@@ -86,4 +86,8 @@ For reference, the repo is structured as follows:
     ├── gnn/
     ├── notebooks/               -> analysis of class distribution
     ├── scripts/                 -> execution scripts for gathering data, model training, algorithm execution and table generation
+<<<<<<< HEAD
     └── utils/                   -> utilities: custom objects
+=======
+    └── utils/                   -> utilities: custom objects
+>>>>>>> 9d7f4d7b6da07fc825bd2bf77c11194931136390
