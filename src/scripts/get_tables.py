@@ -248,6 +248,7 @@ def write_table(
         label_text: label for in the LaTeX code
     """
     header = rf"""\begin{{table}}[h!]
+    \footnotesize
     \caption{{{caption_text}}}
     \label{{{label_text}}}
     \centering
@@ -318,57 +319,57 @@ def write_table(
         f.write("\n".join(lines))
     print(f"Wrote table to '{out_path}'")
 
-# for path in ("results/dimacs/dimacs.json", "results/real-life/real_life.json"):
-#     try:
-#         with open(path, 'r') as f:
-#             data = json.load(f)
-#     except FileNotFoundError:
-#         print(f"No file found at {path!r}.")
-#         continue
+for path in ("results/dimacs/dimacs.json", "results/real-life/real_life.json"):
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"No file found at {path!r}.")
+        continue
 
-#     instances = sorted(data.keys())
-#     config = load_config(CONFIG_PATHS[path])
-#     gamma_values = [str(gam) for gam in config["gamma"]]
+    instances = sorted(data.keys())
+    config = load_config(CONFIG_PATHS[path])
+    gamma_values = [str(gam) for gam in config["gamma"]]
 
-#     # Partition instances into regular vs appendix
-#     regular_instances = []
-#     appendix_instances = []
-#     for inst in instances:
-#         info = data[inst]
-#         if classify_instance(info, gamma_values):
-#             regular_instances.append(inst)
-#         else:
-#             appendix_instances.append(inst)
+    # Partition instances into regular vs appendix
+    regular_instances = []
+    appendix_instances = []
+    for inst in instances:
+        info = data[inst]
+        if classify_instance(info, gamma_values):
+            regular_instances.append(inst)
+        else:
+            appendix_instances.append(inst)
 
-#     base_dir = os.path.dirname(path)
-#     base_name = os.path.splitext(os.path.basename(path))[0]
+    base_dir = os.path.dirname(path)
+    base_name = os.path.splitext(os.path.basename(path))[0]
 
-#     if base_name == "dimacs":
-#         regular_caption = "Numerical results for DIMACS instances."
-#         appendix_caption = "Numerical results for DIMACS instances continued."
-#         regular_label   = "tab: dimacs"
-#         appendix_label  = "tab: dimacs cont"
-#     elif base_name == "real_life":
-#         regular_caption = "Numerical results for real life instances."
-#         appendix_caption = "Numerical results for real life instances continued."
-#         regular_label   = "tab: real life"
-#         appendix_label  = "tab: real life cont"
-#     else:
-#         human = base_name.replace("_", " ")
-#         regular_caption = f"Numerical results for {human} instances."
-#         appendix_caption = f"Numerical results for {human} instances continued."
-#         regular_label   = f"tab: {human}"
-#         appendix_label  = f"tab: {human} cont"
+    if base_name == "dimacs":
+        regular_caption = "Numerical results for DIMACS instances."
+        appendix_caption = "Numerical results for DIMACS instances continued."
+        regular_label   = "tab: dimacs"
+        appendix_label  = "tab: dimacs cont"
+    elif base_name == "real_life":
+        regular_caption = "Numerical results for real life instances."
+        appendix_caption = "Numerical results for real life instances continued."
+        regular_label   = "tab: real life"
+        appendix_label  = "tab: real life cont"
+    else:
+        human = base_name.replace("_", " ")
+        regular_caption = f"Numerical results for {human} instances."
+        appendix_caption = f"Numerical results for {human} instances continued."
+        regular_label   = f"tab: {human}"
+        appendix_label  = f"tab: {human} cont"
 
-#     # Write regular table
-#     regular_tex = os.path.join(base_dir, f"{base_name}.tex")
-#     write_table(data, regular_instances, gamma_values,
-#                 regular_tex, regular_caption, regular_label)
+    # Write regular table
+    regular_tex = os.path.join(base_dir, f"{base_name}.tex")
+    write_table(data, regular_instances, gamma_values,
+                regular_tex, regular_caption, regular_label)
 
-#     # Write appendix table
-#     appendix_tex = os.path.join(base_dir, f"{base_name}_appendix.tex")
-#     write_table(data, appendix_instances, gamma_values,
-#                 appendix_tex, appendix_caption, appendix_label)
+    # Write appendix table
+    appendix_tex = os.path.join(base_dir, f"{base_name}_appendix.tex")
+    write_table(data, appendix_instances, gamma_values,
+                appendix_tex, appendix_caption, appendix_label)
 
 # ----------------------------------------------------------------------------------------------------
 # CODE FOR HYPERPARAMERER TABLE
@@ -500,3 +501,112 @@ def write_hyperparameter_table():
     print(f"Wrote hyperparameter table to '{output_path}'")
 
 write_hyperparameter_table()
+
+# ----------------------------------------------------------------------------------------------------
+# CODE FOR REPRODUCIBILITY TABLE
+# ----------------------------------------------------------------------------------------------------
+
+def write_reproducibility_table():
+    """
+    Write a .tex file showing instances where k values from YAML differ from TSQC average results.
+    Combines both DIMACS and real-life instances in a single table.
+    """
+    discrepancies = []
+    
+    # Check both DIMACS and real-life results
+    for path in ("results/dimacs/dimacs.json", "results/real-life/real_life.json"):
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            print(f"No file found at {path!r}.")
+            continue
+
+        config = load_config(CONFIG_PATHS[path])
+        instances = sorted(data.keys())
+        gamma_values = config["gamma"]
+        
+        # Check each instance-gamma pair
+        for inst in instances:
+            info = data[inst]
+            nv = info['num_vertices']
+            rho = info['density']
+            
+            for gamma in gamma_values:
+                if str(gamma) in info:  # Check if this gamma exists in results
+                    tsqc_results = info[str(gamma)]['tsqc']
+                    tsqc_max_obj = max(tsqc_results['objectives'])
+                    tsqc_avg_obj = sum(tsqc_results['objectives']) / len(tsqc_results['objectives'])
+                    
+                    # Get k value from YAML config
+                    try:
+                        k_values = config.get('k', {})
+                        if gamma in k_values and inst in k_values[gamma]:
+                            k_val = k_values[gamma][inst]
+                            
+                            # Compare k value with TSQC average objective
+                            if k_val != tsqc_max_obj:
+                                # Format TSQC result
+                                if tsqc_avg_obj == 0:
+                                    tsqc_formatted = "TL"
+                                else:
+                                    tsqc_formatted = format_objective(tsqc_results['objectives'])
+                                
+                                discrepancies.append({
+                                    'instance': inst,
+                                    'nv': nv,
+                                    'rho': rho,
+                                    'gamma': gamma,
+                                    'k_val': k_val,
+                                    'tsqc_result': tsqc_formatted
+                                })
+                    except KeyError:
+                        continue
+    
+    if not discrepancies:
+        print("No discrepancies found between k values and TSQC results.")
+        return
+    
+    # Sort discrepancies by instance name then gamma
+    discrepancies.sort(key=lambda x: (x['instance'], x['gamma']))
+    
+    # Create table
+    header = r"""\begin{table}[h!]
+    \caption{Differing results between \cite{djeddi2019extension} and ours}
+    \label{tab: differing results}
+    \centering
+    \begin{tabular}{l c c c c c c}
+    \toprule
+    \toprule
+    \multicolumn{4}{c}{instance}  & & \multicolumn{2}{c}{\texttt{TSQC} max(avg)} \\
+    \cmidrule{1-4} \cmidrule{6-7}
+    name & $|V|$ & $\rho$ & $\gamma$ & & Djeddi & ours \\
+    \midrule"""
+
+    footer = r"""
+    \bottomrule
+    \bottomrule
+    \end{tabular}
+\end{table}"""
+
+    lines = [header]
+    newline = r"\\"
+    
+    for i, disc in enumerate(discrepancies):
+        inst_name = disc['instance'].replace("_", " ").lower()
+        line = (f"{inst_name} & {disc['nv']} & {disc['rho']:.3f} & {disc['gamma']} & & "
+                f"{disc['k_val']} & {disc['tsqc_result']} {newline}")
+        lines.append(line)
+    
+    lines.append(footer)
+    
+    # Write to file
+    output_path = "results/reproducibility.tex"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    with open(output_path, 'w') as f:
+        f.write("\n".join(lines))
+    
+    print(f"Wrote reproducibility table to '{output_path}' with {len(discrepancies)} discrepancies.")
+
+write_reproducibility_table()

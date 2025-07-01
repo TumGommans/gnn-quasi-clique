@@ -1,7 +1,5 @@
 """Custom graph object."""
 
-import random
-import numpy as np
 from collections import defaultdict, deque
 
 class Graph:

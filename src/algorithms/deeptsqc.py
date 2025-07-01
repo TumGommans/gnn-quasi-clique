@@ -119,7 +119,7 @@ class DeepTSQC(TSQC):
                         print(f"  Stopping k={k} search: Could not generate restart solution.")
                         found_clique_for_k = None
                         break
-                    if time.time() - start_time_k > self._time_limit:
+                    if time.time() - start_time_overall > self._time_limit:
                         print(f"  Timeout reached for finding k={k}. Stopping search for this k.")
                         found_clique_for_k = None
                         break

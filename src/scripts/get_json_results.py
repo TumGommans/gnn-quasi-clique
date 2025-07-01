@@ -111,6 +111,7 @@ def get_results(path: str):
     seeds = [random.randint(0, 2**31 - 1) for _ in range(10)]
 
     gamma_values = config['gamma']
+    k_values = config['k']
 
     name = os.path.basename(os.path.normpath(data_path))
     results_path = os.path.join("results", name)
@@ -168,7 +169,7 @@ def get_results(path: str):
                         )
                         print("Starting TSQC process...")
                         best_clique_nodes, time = tsqc.solve(
-                            initial_k=2,
+                            initial_k=k_values[gamma_val][instance_name],
                         )
                     else:
                         tsqc = DeepTSQC(
@@ -181,10 +182,11 @@ def get_results(path: str):
                             time_limit=time_limit
                         )                   
                         print("Starting TSQC process...")
-                        best_clique_nodes, time = tsqc.solve(initial_k=2)
-
+                        best_clique_nodes, time = tsqc.solve(
+                            initial_k=k_values[gamma_val][instance_name]
+                        )
                     print("\n--- Final Result ---")
-                    if best_clique_nodes and len(best_clique_nodes) > 0 :
+                    if best_clique_nodes and len(best_clique_nodes) > 0:
                         found_clique_size = len(best_clique_nodes)
                         if hasattr(tsqc, 'best_quasi_clique_size') and tsqc.best_quasi_clique_size > 0:
                             found_clique_size = tsqc.best_quasi_clique_size
@@ -233,5 +235,5 @@ def get_gnn_from_config() -> SearchDepthGNN:
     model.load_state_dict(torch.load(WEIGHTS_PATH, map_location='cpu'))
     return model
 
-for path in (CONFIG_PATH_REAL_LIFE, CONFIG_PATH_DIMACS):
+for path in (CONFIG_PATH_DIMACS, CONFIG_PATH_REAL_LIFE):
     get_results(path)

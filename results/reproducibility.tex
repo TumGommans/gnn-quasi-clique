@@ -1,0 +1,21 @@
+\begin{table}[h!]
+    \caption{Differing results between \cite{djeddi2019extension} and ours}
+    \label{tab: differing results}
+    \centering
+    \begin{tabular}{l c c c c c c}
+    \toprule
+    \toprule
+    \multicolumn{4}{c}{instance}  & & \multicolumn{2}{c}{\texttt{TSQC} max(avg)} \\
+    \cmidrule{1-4} \cmidrule{6-7}
+    name & $|V|$ & $\rho$ & $\gamma$ & & Djeddi & ours \\
+    \midrule
+california & 6175 & 0.001 & 0.6 & & 14 & 16(14.8) \\
+harvard500 & 500 & 0.016 & 0.5 & & 37 & TL \\
+brock400-2 & 400 & 0.749 & 1.0 & & 29 & TL \\
+keller5 & 776 & 0.752 & 0.85 & & 286 & 290(172.3) \\
+keller5 & 776 & 0.752 & 0.95 & & 47 & 48(47.2) \\
+
+    \bottomrule
+    \bottomrule
+    \end{tabular}
+\end{table}
